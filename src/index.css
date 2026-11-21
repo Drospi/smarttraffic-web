@@ -1,0 +1,322 @@
+@import "tailwindcss";
+
+@theme {
+  --font-pixel: "Press Start 2P", monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --font-vt: "VT323", monospace;
+
+  --color-night: #090a14;
+  --color-panel: #111428;
+  --color-panel-alt: #161a33;
+  --color-neon-cyan: #00f0ff;
+  --color-neon-green: #39ff14;
+  --color-neon-amber: #ffb800;
+  --color-neon-pink: #ff0055;
+}
+
+:root {
+  color-scheme: dark;
+  --bg-night: #090a14;
+  --bg-panel: #111428;
+  --neon-cyan: #00f0ff;
+  --neon-green: #39ff14;
+  --neon-amber: #ffb800;
+  --neon-pink: #ff0055;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-night);
+  color: #e6edf7;
+  font-family: var(--font-mono);
+  min-height: 100vh;
+}
+
+/* Fondo sutil cuadriculado retro neón */
+.pixel-grid-bg {
+  background-color: #090a14;
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.font-pixel {
+  font-family: var(--font-pixel);
+}
+
+.font-vt {
+  font-family: var(--font-vt);
+}
+
+.font-mono-code {
+  font-family: var(--font-mono);
+}
+
+/* Renderizado pixelado nítido obligatorio */
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Paneles Retro Pixel-Art Neón */
+.pixel-panel {
+  background-color: #111428;
+  border: 2px solid #2a335c;
+  box-shadow: 4px 4px 0px #04050a;
+}
+
+.pixel-panel-cyan {
+  background-color: #111428;
+  border: 2px solid #00f0ff;
+  box-shadow:
+    4px 4px 0px #004e59,
+    0 0 12px rgba(0, 240, 255, 0.22);
+}
+
+.pixel-panel-green {
+  background-color: #111428;
+  border: 2px solid #39ff14;
+  box-shadow:
+    4px 4px 0px #124d07,
+    0 0 12px rgba(57, 255, 20, 0.2);
+}
+
+.pixel-panel-amber {
+  background-color: #111428;
+  border: 2px solid #ffb800;
+  box-shadow:
+    4px 4px 0px #594000,
+    0 0 12px rgba(255, 184, 0, 0.2);
+}
+
+.pixel-panel-pink {
+  background-color: #111428;
+  border: 2px solid #ff0055;
+  box-shadow:
+    4px 4px 0px #59001e,
+    0 0 12px rgba(255, 0, 85, 0.24);
+}
+
+/* Botones estilo Arcade con sombra sólida pixelada */
+.arcade-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--font-pixel);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  padding: 0.6rem 0.9rem;
+  border: 2px solid currentColor;
+  background-color: #111428;
+  box-shadow: 4px 4px 0px #04050a;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 80ms steps(2), box-shadow 80ms steps(2), background-color 120ms ease, color 120ms ease;
+}
+
+.arcade-btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px #04050a, 0 0 12px currentColor;
+}
+
+.arcade-btn:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0px #04050a;
+}
+
+.arcade-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.arcade-btn-cyan {
+  color: #00f0ff;
+  border-color: #00f0ff;
+  box-shadow: 4px 4px 0px #004e59;
+}
+
+.arcade-btn-cyan:hover:not(:disabled) {
+  background-color: rgba(0, 240, 255, 0.14);
+  box-shadow: 5px 5px 0px #004e59, 0 0 14px rgba(0, 240, 255, 0.45);
+}
+
+.arcade-btn-cyan-solid {
+  color: #090a14;
+  background-color: #00f0ff;
+  border-color: #a6fbff;
+  box-shadow: 4px 4px 0px #005866;
+}
+
+.arcade-btn-cyan-solid:hover:not(:disabled) {
+  background-color: #3df6ff;
+  box-shadow: 5px 5px 0px #005866, 0 0 16px rgba(0, 240, 255, 0.6);
+}
+
+.arcade-btn-green {
+  color: #39ff14;
+  border-color: #39ff14;
+  box-shadow: 4px 4px 0px #125206;
+}
+
+.arcade-btn-green:hover:not(:disabled) {
+  background-color: rgba(57, 255, 20, 0.14);
+  box-shadow: 5px 5px 0px #125206, 0 0 14px rgba(57, 255, 20, 0.45);
+}
+
+.arcade-btn-amber {
+  color: #ffb800;
+  border-color: #ffb800;
+  box-shadow: 4px 4px 0px #5c4200;
+}
+
+.arcade-btn-amber:hover:not(:disabled) {
+  background-color: rgba(255, 184, 0, 0.14);
+  box-shadow: 5px 5px 0px #5c4200, 0 0 14px rgba(255, 184, 0, 0.45);
+}
+
+.arcade-btn-pink {
+  color: #ff0055;
+  border-color: #ff0055;
+  box-shadow: 4px 4px 0px #5e0020;
+}
+
+.arcade-btn-pink:hover:not(:disabled) {
+  background-color: rgba(255, 0, 85, 0.16);
+  box-shadow: 5px 5px 0px #5e0020, 0 0 14px rgba(255, 0, 85, 0.5);
+}
+
+/* Indicador de navegación accesible (forma + borde, no solo color) */
+.nav-item-btn {
+  position: relative;
+  border: 2px solid #262f56;
+  background-color: #111428;
+  box-shadow: 3px 3px 0px #04050a;
+  transition: transform 80ms steps(2), border-color 120ms ease, background-color 120ms ease;
+}
+
+.nav-item-btn:hover {
+  border-color: #00f0ff;
+  background-color: #161b36;
+}
+
+.nav-item-btn[aria-current="page"] {
+  border-color: #00f0ff;
+  background-color: rgba(0, 240, 255, 0.12);
+  color: #00f0ff;
+  box-shadow: 3px 3px 0px #004e59, 0 0 12px rgba(0, 240, 255, 0.25);
+}
+
+.nav-item-btn[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -2px 0;
+  border-block-end: 4px solid #00f0ff;
+}
+
+/* Native modal <dialog> scroll containment (modern-web-guidance: dialog) */
+dialog:modal {
+  overscroll-behavior: contain;
+  margin: auto;
+  padding: 0;
+  border: 4px solid #00f0ff;
+  background-color: #111428;
+  color: #e6edf7;
+  box-shadow: 8px 8px 0px #003d47, 0 0 28px rgba(0, 240, 255, 0.35);
+  max-width: min(720px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+}
+
+dialog::backdrop {
+  background-color: rgba(4, 5, 12, 0.82);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Responsive table wrapper (modern-web-guidance: responsive-table) */
+.table-wrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  container-type: inline-size;
+}
+
+.table-wrapper table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.table-wrapper thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+}
+
+/* Custom retro range input */
+input[type="range"].retro-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 10px;
+  background: #090a14;
+  border: 2px solid #2e3866;
+  outline: none;
+}
+
+input[type="range"].retro-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 20px;
+  background: #00f0ff;
+  border: 2px solid #ffffff;
+  box-shadow: 2px 2px 0px #004e59;
+  cursor: pointer;
+}
+
+input[type="range"].retro-range.amber::-webkit-slider-thumb {
+  background: #ffb800;
+  box-shadow: 2px 2px 0px #5c4200;
+}
+
+input[type="range"].retro-range.green::-webkit-slider-thumb {
+  background: #39ff14;
+  box-shadow: 2px 2px 0px #125206;
+}
+
+input[type="range"].retro-range.pink::-webkit-slider-thumb {
+  background: #ff0055;
+  box-shadow: 2px 2px 0px #5e0020;
+}
+
+/* Focus visible neón */
+:focus-visible {
+  outline: 2px solid #00f0ff;
+  outline-offset: 2px;
+}
+
+/* Scrollbar retro */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090a14;
+  border-left: 2px solid #1f274a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2c386b;
+  border: 2px solid #090a14;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00f0ff;
+}
