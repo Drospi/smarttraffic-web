@@ -6,6 +6,7 @@ import type {
   ApproachRecord,
   CycleArrivalSample,
   LinkOccupancy,
+  PlanGenerationFormulaInfo,
   SignalPlan,
   SimulationConfig,
   TraceCandidate,
@@ -16,6 +17,7 @@ const DELTA_STEPS: readonly number[] = [-6, -3, 0, 3, 6] as const;
 
 interface RawCandidate {
   plan: SignalPlan;
+  originTag: string;
   isCurrentPlan: boolean;
   heuristicScore: number;
 }
@@ -27,24 +29,47 @@ interface OrderedHorizonSample {
 }
 
 /**
- * Calcula las proporciones de carga real proyectada sobre el horizonte H
- * para que la heurística detecte al instante tanto picos horizontales como inversiones hacia verticales.
+ * Fórmula Matemática Sencilla (Regla de Tres / Proporción Directa — sin Machine Learning):
+ * Verde Base Horizontal = redondear(60 * Carga_Horizontal / (Carga_Horizontal + Carga_Vertical))
+ * Verde Base Vertical   = 60 - Verde Base Horizontal
+ * Genera automáticamente el plan proporcional exacto y su plan inverso espejo (ej. 39s/21s ↔ 21s/39s).
  */
-function computeDemandRatios(
+export function computeProportionalPlanFormula(
   queues: ApproachRecord,
   links: LinkOccupancy,
   rates: ApproachRecord,
   horizon: number
-): { targetRatioI1: number; targetRatioI2: number } {
-  // Proyección sobre H ciclos (cola inicial + llegadas por ciclo * H + aporte del tramo entrante)
-  const loadI1F1 = queues['I1-F1'] + rates['I1-F1'] * horizon + links.R21 * 0.7;
-  const loadI1F2 = queues['I1-F2'] + rates['I1-F2'] * horizon;
-  const loadI2F1 = queues['I2-F1'] + rates['I2-F1'] * horizon + links.R12 * 0.7;
-  const loadI2F2 = queues['I2-F2'] + rates['I2-F2'] * horizon;
+): PlanGenerationFormulaInfo {
+  const loadI1F1 = Number((queues['I1-F1'] + rates['I1-F1'] * horizon + links.R21 * 0.7).toFixed(1));
+  const loadI1F2 = Number((queues['I1-F2'] + rates['I1-F2'] * horizon).toFixed(1));
+  const loadI2F1 = Number((queues['I2-F1'] + rates['I2-F1'] * horizon + links.R12 * 0.7).toFixed(1));
+  const loadI2F2 = Number((queues['I2-F2'] + rates['I2-F2'] * horizon).toFixed(1));
+
+  const ratioI1 = loadI1F1 / Math.max(1, loadI1F1 + loadI1F2);
+  const ratioI2 = loadI2F1 / Math.max(1, loadI2F1 + loadI2F2);
+
+  const rawGreenI1 = Number((60 * ratioI1).toFixed(1));
+  const rawGreenI2 = Number((60 * ratioI2).toFixed(1));
+
+  const proportionalPlan = clampPlanToPSR(Math.round(rawGreenI1), Math.round(rawGreenI2));
+  // Plan inverso espejo: invierte el reparto horizontal/vertical (ej. 39/21 -> 21/39) acotado a PSR
+  const inversePlan = clampPlanToPSR(60 - proportionalPlan.g11, 60 - proportionalPlan.g21);
 
   return {
-    targetRatioI1: loadI1F1 / Math.max(1, loadI1F1 + loadI1F2),
-    targetRatioI2: loadI2F1 / Math.max(1, loadI2F1 + loadI2F2),
+    rateI1F1: rates['I1-F1'],
+    rateI1F2: rates['I1-F2'],
+    rateI2F1: rates['I2-F1'],
+    rateI2F2: rates['I2-F2'],
+    loadI1F1,
+    loadI1F2,
+    loadI2F1,
+    loadI2F2,
+    ratioI1Pct: Number((ratioI1 * 100).toFixed(1)),
+    ratioI2Pct: Number((ratioI2 * 100).toFixed(1)),
+    rawGreenI1,
+    rawGreenI2,
+    proportionalPlan,
+    inversePlan,
   };
 }
 
@@ -54,21 +79,18 @@ function computeDemandRatios(
  */
 function scorePlanHeuristic(
   plan: SignalPlan,
-  queues: ApproachRecord,
-  links: LinkOccupancy,
-  rates: ApproachRecord,
-  horizon: number
+  formula: PlanGenerationFormulaInfo,
+  links: LinkOccupancy
 ): number {
-  const { targetRatioI1, targetRatioI2 } = computeDemandRatios(queues, links, rates, horizon);
+  const targetRatioI1 = formula.ratioI1Pct / 100;
+  const targetRatioI2 = formula.ratioI2Pct / 100;
 
   const actualRatioI1 = plan.g11 / 60;
   const actualRatioI2 = plan.g21 / 60;
 
-  // Menor distancia = mejor candidato (más cercano a la proporción óptima de carga real)
   const diffI1 = Math.abs(actualRatioI1 - targetRatioI1);
   const diffI2 = Math.abs(actualRatioI2 - targetRatioI2);
 
-  // Penalización leve por empujar hacia un tramo ya muy cargado
   const r12Penalty = links.R12 > 18 && plan.g11 > 38 ? 0.08 : 0;
   const r21Penalty = links.R21 > 18 && plan.g21 > 38 ? 0.08 : 0;
 
@@ -76,83 +98,100 @@ function scorePlanHeuristic(
 }
 
 /**
- * Búsqueda Local + Plan Objetivo Heurístico + Anclas PSR (estrictamente filtrados por PSR).
- * Permite reaccionar de inmediato (en 1 sola decisión) incluso ante inversiones completas de tráfico
- * (ej. de 44s/16s horizontal a 20s/40s vertical).
+ * Genera candidatos a partir de la fórmula matemática proporcional directa (sin aprendizaje de modelos):
+ * 1. Plan Vigente
+ * 2. Plan Proporcional Exacto (regla de tres sobre vehículos/ciclo)
+ * 3. Vecinos de ajuste fino (±3s, ±6s) alrededor del proporcional y del vigente
+ * 4. Plan Inverso Espejo (ej. 21s/39s cuando el proporcional es 39s/21s)
+ * 5. Anclas seguras PSR (equilibrado 30/30 y extremos asimétricos)
  */
 function generateOrderedCandidates(
   currentPlan: SignalPlan,
-  queues: ApproachRecord,
+  formula: PlanGenerationFormulaInfo,
   links: LinkOccupancy,
-  rates: ApproachRecord,
-  horizon: number,
   maxCandidates = 6
 ): RawCandidate[] {
   const seen = new Map<string, RawCandidate>();
 
-  const tryAdd = (plan: SignalPlan, isCurrentPlan: boolean): void => {
+  const tryAdd = (plan: SignalPlan, originTag: string, isCurrentPlan: boolean): void => {
     const check = validatePSR(plan);
     if (!check.valid) return;
     const key = planKey(plan);
     if (!seen.has(key)) {
       seen.set(key, {
         plan,
+        originTag,
         isCurrentPlan,
-        heuristicScore: scorePlanHeuristic(plan, queues, links, rates, horizon),
+        heuristicScore: scorePlanHeuristic(plan, formula, links),
       });
     }
   };
 
-  // 1) Asegurar plan vigente primero (fija cota inicial Beta)
-  tryAdd({ ...currentPlan }, true);
+  // 1) Plan vigente (fija la primera cota Beta)
+  tryAdd({ ...currentPlan }, 'Plan Vigente', true);
 
-  // 2) Plan objetivo proporcional directo a los vehículos/ciclo y colas actuales + su vecindario Δg
-  const { targetRatioI1, targetRatioI2 } = computeDemandRatios(queues, links, rates, horizon);
-  const targetPlan = clampPlanToPSR(Math.round(60 * targetRatioI1), Math.round(60 * targetRatioI2));
-  tryAdd(targetPlan, false);
+  // 2) Plan proporcional calculado por regla de tres directa
+  const targetPlan = formula.proportionalPlan;
+  tryAdd(targetPlan, 'Proporcional exacto', false);
 
+  // 3) Plan inverso espejo (60 - verde proporcional) para cubrir siempre la ruta opuesta
+  const invPlan = formula.inversePlan;
+  tryAdd(invPlan, 'Plan Inverso (espejo)', false);
+
+  // 4) Variaciones de ajuste fino (±3s, ±6s) alrededor del proporcional y del vigente
   for (const d1 of DELTA_STEPS) {
     for (const d2 of DELTA_STEPS) {
       if (d1 === 0 && d2 === 0) continue;
-      // Vecinos alrededor del plan objetivo (reacción instantánea en inversiones)
       const tg11 = targetPlan.g11 + d1;
       const tg21 = targetPlan.g21 + d2;
-      tryAdd({ g11: tg11, g12: 60 - tg11, g21: tg21, g22: 60 - tg21 }, false);
+      const deltaLabel = d1 === d2 ? `Ajuste ${d1 > 0 ? `+${d1}` : d1}s` : 'Ajuste fino I1/I2';
+      tryAdd({ g11: tg11, g12: 60 - tg11, g21: tg21, g22: 60 - tg21 }, deltaLabel, false);
 
-      // Vecinos alrededor del plan vigente (búsqueda local clásica)
       const cg11 = currentPlan.g11 + d1;
       const cg21 = currentPlan.g21 + d2;
-      tryAdd({ g11: cg11, g12: 60 - cg11, g21: cg21, g22: 60 - cg21 }, false);
+      tryAdd({ g11: cg11, g12: 60 - cg11, g21: cg21, g22: 60 - cg21 }, 'Vecino local', false);
     }
   }
 
-  // 3) Planes ancla PSR en los extremos (horizontal, vertical, equilibrado y asimétricos I1≠I2)
-  const anchors: readonly SignalPlan[] = [
-    { g11: 20, g12: 40, g21: 20, g22: 40 },
-    { g11: 44, g12: 16, g21: 44, g22: 16 },
-    { g11: 20, g12: 40, g21: 44, g22: 16 },
-    { g11: 44, g12: 16, g21: 20, g22: 40 },
-    { g11: 30, g12: 30, g21: 30, g22: 30 },
+  // 5) Anclas PSR (extremos horizontales, verticales, asimétricos y equilibrado)
+  const anchors: readonly { plan: SignalPlan; tag: string }[] = [
+    { plan: { g11: 20, g12: 40, g21: 20, g22: 40 }, tag: 'Máx. Verticales' },
+    { plan: { g11: 44, g12: 16, g21: 44, g22: 16 }, tag: 'Máx. P. Salazar' },
+    { plan: { g11: 20, g12: 40, g21: 44, g22: 16 }, tag: 'Asimétrico I1↓/I2↑' },
+    { plan: { g11: 44, g12: 16, g21: 20, g22: 40 }, tag: 'Asimétrico I1↑/I2↓' },
+    { plan: { g11: 30, g12: 30, g21: 30, g22: 30 }, tag: 'Equilibrado 30/30' },
   ];
   for (const anchor of anchors) {
-    tryAdd(anchor, false);
+    tryAdd(anchor.plan, anchor.tag, false);
   }
 
   const currentEntry = seen.get(planKey(currentPlan));
+  const inverseEntry = seen.get(planKey(invPlan));
   const others = Array.from(seen.values())
     .filter((c) => !c.isCurrentPlan)
     .sort((a, b) => b.heuristicScore - a.heuristicScore);
 
-  // Incluir: plan vigente + mejores candidatos heurísticos + 1 candidato contrastante para evidenciar poda
   const selected: RawCandidate[] = [];
   if (currentEntry) {
     selected.push(currentEntry);
   }
-  const topSlice = others.slice(0, Math.max(1, maxCandidates - 2));
-  selected.push(...topSlice);
-  const contrasting = others[others.length - 1];
-  if (contrasting && !selected.some((c) => planKey(c.plan) === planKey(contrasting.plan))) {
-    selected.push(contrasting);
+
+  // Agregar los mejores candidatos ordenados por la fórmula proporcional
+  for (const cand of others) {
+    if (selected.length >= maxCandidates - 1) break;
+    if (!selected.some((s) => planKey(s.plan) === planKey(cand.plan))) {
+      selected.push(cand);
+    }
+  }
+
+  // Garantizar que el Plan Inverso (espejo) esté siempre presente para contrastar y evidenciar poda
+  if (inverseEntry && !selected.some((s) => planKey(s.plan) === planKey(inverseEntry.plan))) {
+    selected.push(inverseEntry);
+  } else {
+    const contrasting = others[others.length - 1];
+    if (contrasting && !selected.some((s) => planKey(s.plan) === planKey(contrasting.plan))) {
+      selected.push(contrasting);
+    }
   }
 
   return selected.slice(0, maxCandidates);
@@ -228,12 +267,17 @@ export function decidePlanAlphaBeta(
 ): AlphaBetaDecisionResult {
   const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
-  const rawCandidates = generateOrderedCandidates(
-    currentPlan,
+  const planGeneration = computeProportionalPlanFormula(
     queues,
     links,
     effectiveRates,
-    config.horizon,
+    config.horizon
+  );
+
+  const rawCandidates = generateOrderedCandidates(
+    currentPlan,
+    planGeneration,
+    links,
     6
   );
   const samples = generateOrderedPoissonSamples(
@@ -248,6 +292,7 @@ export function decidePlanAlphaBeta(
     label: c.isCurrentPlan
       ? `Plan Vigente ${formatPlanShort(c.plan)}`
       : `Plan ${String.fromCharCode(65 + idx)} ${formatPlanShort(c.plan)}`,
+    originTag: c.originTag,
     plan: { ...c.plan },
     isCurrentPlan: c.isCurrentPlan,
     heuristicScore: c.heuristicScore,
@@ -475,6 +520,7 @@ export function decidePlanAlphaBeta(
     totalLeavesPossible: candidates.length * samples.length,
     evaluatedLeaves,
     prunedLeaves,
+    planGeneration,
     candidates,
     steps,
   };
@@ -491,10 +537,14 @@ export function decidePlanAlphaBeta(
 }
 
 /**
- * Ejemplo pedagógico de clase (3 planes × 3 muestras) generado con la misma estructura exacta
- * de poda Alfa-Beta para explicar paso a paso en la defensa.
+ * Ejemplo pedagógico de clase (5 planes generados con la fórmula matemática proporcional
+ * directa + plan inverso espejo × 3 escenarios de tráfico).
+ * Soporta tanto congestión en C. Pedro Salazar (gana 39s/21s) como congestión inversa
+ * en Av. 20 de Octubre / Av. 6 de Agosto (gana 21s/39s) usando exactamente la misma fórmula.
  */
-export function buildClassExampleTrace(): AlphaBetaTrace {
+export function buildClassExampleTrace(
+  direction: 'horizontal_peak' | 'vertical_peak' = 'horizontal_peak'
+): AlphaBetaTrace {
   interface ClassSampleSpec {
     totalDemand: number;
     accumulatedWait: number;
@@ -504,6 +554,7 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
 
   interface ClassSpec {
     label: string;
+    originTag: string;
     plan: SignalPlan;
     isCurrentPlan: boolean;
     heuristicScore: number;
@@ -511,50 +562,175 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
   }
 
   const horizon = 4;
+  const isHorizontal = direction === 'horizontal_peak';
 
-  // Datos reales de tráfico (vehículos, tiempo de espera acumulado, fila máxima y ciclos saturados)
-  // El puntaje total se calcula exactamente con esos mismos datos (50% espera + 30% fila máxima + 20% saturación)
-  const specs: ClassSpec[] = [
-    {
-      label: 'Plan A Vigente (30,30 | 30,30)',
-      plan: { g11: 30, g12: 30, g21: 30, g22: 30 },
-      isCurrentPlan: true,
-      heuristicScore: 76.0,
-      samples: [
-        { totalDemand: 192, accumulatedWait: 9728, maxQueue: 21, saturatedCycles: 1 }, // 32.0 + 21.0 + 5.0 = 58.0
-        { totalDemand: 168, accumulatedWait: 8360, maxQueue: 19, saturatedCycles: 1 }, // 27.5 + 19.0 + 5.0 = 51.5
-        { totalDemand: 144, accumulatedWait: 7600, maxQueue: 16, saturatedCycles: 0 }, // 25.0 + 16.0 + 0.0 = 41.0
-      ],
-    },
-    {
-      label: 'Plan B Desfavorable (24,36 | 24,36)',
-      plan: { g11: 24, g12: 36, g21: 24, g22: 36 },
-      isCurrentPlan: false,
-      heuristicScore: 54.0,
-      samples: [
-        { totalDemand: 192, accumulatedWait: 10944, maxQueue: 24, saturatedCycles: 2 }, // 36.0 + 24.0 + 10.0 = 70.0 -> PODA
-        { totalDemand: 168, accumulatedWait: 9424, maxQueue: 21, saturatedCycles: 1 },
-        { totalDemand: 144, accumulatedWait: 8208, maxQueue: 18, saturatedCycles: 1 },
-      ],
-    },
-    {
-      label: 'Plan C Óptimo (39,21 | 39,21)',
-      plan: { g11: 39, g12: 21, g21: 39, g22: 21 },
-      isCurrentPlan: false,
-      heuristicScore: 95.5,
-      samples: [
-        { totalDemand: 192, accumulatedWait: 7904, maxQueue: 15, saturatedCycles: 1 }, // 26.0 + 15.0 + 5.0 = 46.0
-        { totalDemand: 168, accumulatedWait: 7296, maxQueue: 13, saturatedCycles: 0 }, // 24.0 + 13.0 + 0.0 = 37.0
-        { totalDemand: 144, accumulatedWait: 6384, maxQueue: 11, saturatedCycles: 0 }, // 21.0 + 11.0 + 0.0 = 32.0
-      ],
-    },
-  ];
+  const planGeneration: PlanGenerationFormulaInfo = isHorizontal
+    ? {
+        rateI1F1: 16.0,
+        rateI1F2: 8.5,
+        rateI2F1: 15.5,
+        rateI2F2: 8.5,
+        loadI1F1: 64.0,
+        loadI1F2: 34.0,
+        loadI2F1: 62.0,
+        loadI2F2: 34.0,
+        ratioI1Pct: 65.3,
+        ratioI2Pct: 64.6,
+        rawGreenI1: 39.2,
+        rawGreenI2: 38.8,
+        proportionalPlan: { g11: 39, g12: 21, g21: 39, g22: 21 },
+        inversePlan: { g11: 21, g12: 39, g21: 21, g22: 39 },
+      }
+    : {
+        rateI1F1: 8.5,
+        rateI1F2: 16.0,
+        rateI2F1: 8.5,
+        rateI2F2: 15.5,
+        loadI1F1: 34.0,
+        loadI1F2: 64.0,
+        loadI2F1: 34.0,
+        loadI2F2: 62.0,
+        ratioI1Pct: 34.7,
+        ratioI2Pct: 35.4,
+        rawGreenI1: 20.8,
+        rawGreenI2: 21.2,
+        proportionalPlan: { g11: 21, g12: 39, g21: 21, g22: 39 },
+        inversePlan: { g11: 39, g12: 21, g21: 39, g22: 21 },
+      };
+
+  // 5 planes generados con la fórmula matemática: Vigente + Proporcional + Ajustes ±3s + Plan Inverso (21s/39s ↔ 39s/21s)
+  const specs: ClassSpec[] = isHorizontal
+    ? [
+        {
+          label: 'Plan Vigente (30,30 | 30,30)',
+          originTag: 'Plan Vigente',
+          plan: { g11: 30, g12: 30, g21: 30, g22: 30 },
+          isCurrentPlan: true,
+          heuristicScore: 76.0,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 9728, maxQueue: 21, saturatedCycles: 1 }, // 58.0
+            { totalDemand: 168, accumulatedWait: 8360, maxQueue: 19, saturatedCycles: 1 }, // 51.5
+            { totalDemand: 144, accumulatedWait: 7600, maxQueue: 16, saturatedCycles: 0 }, // 41.0
+          ],
+        },
+        {
+          label: 'Plan B Proporcional (39,21 | 39,21)',
+          originTag: 'Fórmula proporcional',
+          plan: { g11: 39, g12: 21, g21: 39, g22: 21 },
+          isCurrentPlan: false,
+          heuristicScore: 99.2,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 7600, maxQueue: 14, saturatedCycles: 1 }, // 25.0 + 14.0 + 5.0 = 44.0
+            { totalDemand: 168, accumulatedWait: 6992, maxQueue: 12, saturatedCycles: 0 }, // 23.0 + 12.0 + 0.0 = 35.0
+            { totalDemand: 144, accumulatedWait: 6080, maxQueue: 10, saturatedCycles: 0 }, // 20.0 + 10.0 + 0.0 = 30.0
+          ],
+        },
+        {
+          label: 'Plan C Ajuste +3s (42,18 | 42,18)',
+          originTag: 'Ajuste +3s',
+          plan: { g11: 42, g12: 18, g21: 42, g22: 18 },
+          isCurrentPlan: false,
+          heuristicScore: 91.5,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 8208, maxQueue: 16, saturatedCycles: 1 }, // 27.0 + 16.0 + 5.0 = 48.0 -> PODA (>= 44.0)
+            { totalDemand: 168, accumulatedWait: 7296, maxQueue: 14, saturatedCycles: 0 },
+            { totalDemand: 144, accumulatedWait: 6384, maxQueue: 11, saturatedCycles: 0 },
+          ],
+        },
+        {
+          label: 'Plan D Ajuste -3s (36,24 | 36,24)',
+          originTag: 'Ajuste -3s',
+          plan: { g11: 36, g12: 24, g21: 36, g22: 24 },
+          isCurrentPlan: false,
+          heuristicScore: 90.0,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 8512, maxQueue: 17, saturatedCycles: 1 }, // 28.0 + 17.0 + 5.0 = 50.0 -> PODA (>= 44.0)
+            { totalDemand: 168, accumulatedWait: 7600, maxQueue: 14, saturatedCycles: 0 },
+            { totalDemand: 144, accumulatedWait: 6688, maxQueue: 12, saturatedCycles: 0 },
+          ],
+        },
+        {
+          label: 'Plan E Inverso (21,39 | 21,39)',
+          originTag: 'Plan Inverso (espejo)',
+          plan: { g11: 21, g12: 39, g21: 21, g22: 39 },
+          isCurrentPlan: false,
+          heuristicScore: 39.8,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 11552, maxQueue: 26, saturatedCycles: 2 }, // 38.0 + 26.0 + 10.0 = 74.0 -> PODA INMEDIATA
+            { totalDemand: 168, accumulatedWait: 9728, maxQueue: 22, saturatedCycles: 1 },
+            { totalDemand: 144, accumulatedWait: 8512, maxQueue: 19, saturatedCycles: 1 },
+          ],
+        },
+      ]
+    : [
+        {
+          label: 'Plan Vigente (30,30 | 30,30)',
+          originTag: 'Plan Vigente',
+          plan: { g11: 30, g12: 30, g21: 30, g22: 30 },
+          isCurrentPlan: true,
+          heuristicScore: 76.0,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 9728, maxQueue: 21, saturatedCycles: 1 }, // 58.0
+            { totalDemand: 168, accumulatedWait: 8360, maxQueue: 19, saturatedCycles: 1 }, // 51.5
+            { totalDemand: 144, accumulatedWait: 7600, maxQueue: 16, saturatedCycles: 0 }, // 41.0
+          ],
+        },
+        {
+          label: 'Plan B Inverso Prop. (21,39 | 21,39)',
+          originTag: 'Fórmula proporcional',
+          plan: { g11: 21, g12: 39, g21: 21, g22: 39 },
+          isCurrentPlan: false,
+          heuristicScore: 99.1,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 7448, maxQueue: 14, saturatedCycles: 1 }, // 24.5 + 14.0 + 5.0 = 43.5
+            { totalDemand: 168, accumulatedWait: 6840, maxQueue: 12, saturatedCycles: 0 }, // 22.5 + 12.0 + 0.0 = 34.5
+            { totalDemand: 144, accumulatedWait: 5928, maxQueue: 10, saturatedCycles: 0 }, // 19.5 + 10.0 + 0.0 = 29.5
+          ],
+        },
+        {
+          label: 'Plan C Ajuste +3s (24,36 | 24,36)',
+          originTag: 'Ajuste +3s',
+          plan: { g11: 24, g12: 36, g21: 24, g22: 36 },
+          isCurrentPlan: false,
+          heuristicScore: 91.2,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 8208, maxQueue: 16, saturatedCycles: 1 }, // 48.0 -> PODA
+            { totalDemand: 168, accumulatedWait: 7296, maxQueue: 14, saturatedCycles: 0 },
+            { totalDemand: 144, accumulatedWait: 6384, maxQueue: 11, saturatedCycles: 0 },
+          ],
+        },
+        {
+          label: 'Plan D Máx. Vert. (20,40 | 20,40)',
+          originTag: 'Límite PSR vertical',
+          plan: { g11: 20, g12: 40, g21: 20, g22: 40 },
+          isCurrentPlan: false,
+          heuristicScore: 94.0,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 7904, maxQueue: 15, saturatedCycles: 1 }, // 46.0 -> PODA (>= 43.5)
+            { totalDemand: 168, accumulatedWait: 7144, maxQueue: 13, saturatedCycles: 0 },
+            { totalDemand: 144, accumulatedWait: 6232, maxQueue: 11, saturatedCycles: 0 },
+          ],
+        },
+        {
+          label: 'Plan E Espejo Horiz. (39,21 | 39,21)',
+          originTag: 'Plan Inverso (espejo)',
+          plan: { g11: 39, g12: 21, g21: 39, g22: 21 },
+          isCurrentPlan: false,
+          heuristicScore: 39.5,
+          samples: [
+            { totalDemand: 192, accumulatedWait: 11552, maxQueue: 26, saturatedCycles: 2 }, // 74.0 -> PODA INMEDIATA
+            { totalDemand: 168, accumulatedWait: 9728, maxQueue: 22, saturatedCycles: 1 },
+            { totalDemand: 144, accumulatedWait: 8512, maxQueue: 19, saturatedCycles: 1 },
+          ],
+        },
+      ];
 
   const sampleLabels = ['Esc. 1 (Pico)', 'Esc. 2 (Media)', 'Esc. 3 (Suave)'];
 
   const candidates: TraceCandidate[] = specs.map((spec, idx) => ({
     id: `cand-${idx}`,
     label: spec.label,
+    originTag: spec.originTag,
     plan: spec.plan,
     isCurrentPlan: spec.isCurrentPlan,
     heuristicScore: spec.heuristicScore,
@@ -625,7 +801,9 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
     null,
     null,
     -Infinity,
-    'Ejemplo de Clase (3 planes × 3 escenarios de tráfico): El agente compara cuántos segundos esperan los vehículos, qué tan larga se vuelve la fila y si se satura la cuadra central. Empezamos probando el Plan A (el que está activo hoy) para fijar la primera referencia Beta.',
+    isHorizontal
+      ? 'Ejemplo con Fórmula Proporcional (5 planes × 3 escenarios — Congestión en C. Pedro Salazar): Con 16 veh/ciclo horizontal vs. 8.5 vertical, la regla de tres propone 39s/21s, sus ajustes ±3s y también su inverso 21s/39s. Empezamos probando el Plan Vigente (30s/30s) para fijar la referencia Beta.'
+      : 'Ejemplo con Fórmula Proporcional INVERSA (5 planes × 3 escenarios — Congestión en Av. 20 de Octubre y 6 de Agosto): Con 8.5 veh/ciclo horizontal vs. 16 vertical, la MISMA regla de tres calcula automáticamente 21s/39s, sus ajustes cercanos y el espejo 39s/21s.',
     [1, 2, 3, 4]
   );
 
@@ -756,9 +934,10 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
     initialPlan: { g11: 30, g12: 30, g21: 30, g22: 30 },
     bestPlan: { ...candidates[bestIndex].plan },
     bestCost: beta,
-    totalLeavesPossible: 9,
+    totalLeavesPossible: candidates.length * 3,
     evaluatedLeaves,
     prunedLeaves,
+    planGeneration,
     candidates,
     steps,
   };

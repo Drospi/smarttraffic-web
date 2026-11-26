@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import {
+  ArrowLeftRight,
   BookOpen,
   Calculator,
   ChevronLeft,
@@ -39,9 +40,15 @@ function getShortPlanTitle(cand: TraceCandidate): string {
 }
 
 export function View4Inspector({ realTrace }: View4InspectorProps) {
-  const [traceMode, setTraceMode] = useState<'real' | 'class'>('class');
-  const classExampleTrace = useMemo(() => buildClassExampleTrace(), []);
-  const trace = traceMode === 'real' ? realTrace : classExampleTrace;
+  const [traceMode, setTraceMode] = useState<'real' | 'class_horiz' | 'class_vert'>('class_horiz');
+  const classHorizTrace = useMemo(() => buildClassExampleTrace('horizontal_peak'), []);
+  const classVertTrace = useMemo(() => buildClassExampleTrace('vertical_peak'), []);
+  const trace =
+    traceMode === 'real'
+      ? realTrace
+      : traceMode === 'class_horiz'
+      ? classHorizTrace
+      : classVertTrace;
   const currentTraceId = `${traceMode}-${trace.cycle}-${trace.timestampMs}`;
 
   const [playback, setPlayback] = useState<{
@@ -188,21 +195,33 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
           </h2>
           <p className="text-xs text-[#a5b3db] mt-1">
             {traceMode === 'real'
-              ? `Mostrando la decisión real del Ciclo ${trace.cycle} del Simulador: ${trace.candidates.length} planes comparados contra ${trace.sampleCount} escenarios de tráfico (${trace.prunedLeaves} escenarios ahorrados en ${trace.latencyMs.toFixed(2)} ms).`
-              : 'Mostrando el Ejemplo de Clase (3 planes × 3 escenarios de tráfico) ideal para explicar cómo nacen Alfa, Beta y la poda a partir de vehículos, espera y filas.'}
+              ? `Mostrando la decisión real del Ciclo ${trace.cycle} del Simulador: ${trace.candidates.length} planes generados desde tus vehículos/ciclo (${trace.prunedLeaves} escenarios ahorrados en ${trace.latencyMs.toFixed(2)} ms).`
+              : traceMode === 'class_horiz'
+              ? 'Ejemplo de 5 planes (Congestión en C. Pedro Salazar): la regla de tres propone 39s/21s, sus ajustes ±3s y también su inverso 21s/39s (que se poda al instante).'
+              : 'Ejemplo INVERSO de 5 planes (Congestión en Av. 20 de Octubre y Av. 6 de Agosto): la MISMA fórmula propone automáticamente 21s/39s y poda el plan 39s/21s.'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setTraceMode('class')}
+            onClick={() => setTraceMode('class_horiz')}
             className={`arcade-btn ${
-              traceMode === 'class' ? 'arcade-btn-amber' : 'arcade-btn-amber opacity-75'
+              traceMode === 'class_horiz' ? 'arcade-btn-amber' : 'arcade-btn-amber opacity-70'
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            EJEMPLO DE CLASE (3×3)
+            EJEMPLO HORIZ. (39s/21s)
+          </button>
+          <button
+            type="button"
+            onClick={() => setTraceMode('class_vert')}
+            className={`arcade-btn ${
+              traceMode === 'class_vert' ? 'arcade-btn-green' : 'arcade-btn-green opacity-70'
+            }`}
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            EJEMPLO INVERSO (21s/39s)
           </button>
           <button
             type="button"
@@ -212,8 +231,100 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            ÚLTIMA DECISIÓN REAL (CICLO {realTrace.cycle})
+            DECISIÓN REAL (CICLO {realTrace.cycle})
           </button>
+        </div>
+      </div>
+
+      {/* NUEVO BLOQUE: FÓRMULA MATEMÁTICA SENCILLA (SIN MACHINE LEARNING) PARA GENERAR LOS PLANES E INVERSOS */}
+      <div className="pixel-panel-cyan p-4 space-y-3 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#1f3154] pb-2.5">
+          <div>
+            <h3 className="font-pixel text-[10px] sm:text-xs text-[#00f0ff]">
+              ¿CÓMO SE GENERAN LOS PLANES Y SUS INVERSOS? (FÓRMULA SENCILLA SIN APRENDIZAJE DE MODELOS)
+            </h3>
+            <p className="text-[11px] text-[#a6b4db] mt-1">
+              No se usan solo 3 planes fijos ni entrenamiento de Machine Learning: el sistema calcula los planes directamente con una <strong>regla de tres sobre los vehículos por ciclo</strong> y genera tanto el plan proporcional como sus ajustes cercanos y su <strong>plan inverso espejo</strong> (ej. 39s/21s ↔ 21s/39s).
+            </p>
+          </div>
+          <span className="px-2 py-1 text-[9px] font-pixel bg-[#39ff14]/15 border border-[#39ff14] text-[#39ff14] shrink-0">
+            0% MACHINE LEARNING · 100% MATEMÁTICA DIRECTA
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+          {/* Fórmula en texto claro */}
+          <div className="lg:col-span-5 bg-[#090a14] border-2 border-[#00f0ff]/60 p-3 space-y-2">
+            <div className="font-pixel text-[9px] text-[#00f0ff]">
+              1. FÓRMULA DE REPARTO PROPORCIONAL (REGLA DE TRES)
+            </div>
+            <div className="bg-[#111428] border border-[#2c3b6e] p-2.5 text-[11px] text-[#e6edf7] space-y-1.5 leading-relaxed">
+              <div>
+                <strong className="text-[#00f0ff]">Verde Base Horizontal</strong> = 60 s × (Carga Horizontal ÷ (Carga Horizontal + Carga Vertical))
+              </div>
+              <div>
+                <strong className="text-[#ffb800]">Verde Base Vertical</strong> = 60 s − Verde Base Horizontal
+              </div>
+              <div>
+                <strong className="text-[#ff6b9a]">Plan Inverso (espejo)</strong> = 60 s − Verde Base Horizontal (cambia el verde hacia la ruta contraria)
+              </div>
+            </div>
+            <p className="text-[11px] text-[#9aa8d1]">
+              Luego se recorta a los límites seguros (Horizontal: 20–44 s, Vertical: 16–40 s) y se añaden variaciones de ±3 s y ±6 s para que Poda Alfa-Beta pruebe todos los modelos y elija el mejor.
+            </p>
+          </div>
+
+          {/* Datos sustituidos en vivo */}
+          <div className="lg:col-span-4 bg-[#090a14] border-2 border-[#ffb800]/60 p-3 space-y-2">
+            <div className="font-pixel text-[9px] text-[#ffb800]">
+              2. CÁLCULO CON LOS VEHÍCULOS/CICLO DE ESTA DECISIÓN
+            </div>
+            <div className="space-y-1.5 text-[11px] text-[#d6e0fa]">
+              <div className="bg-[#111428] border-l-2 border-[#00f0ff] px-2 py-1.5">
+                <strong>Cruce I1 (Av. 20 Oct / P. Salazar):</strong>{' '}
+                {trace.planGeneration.rateI1F1.toFixed(1)} veh/c Horiz vs. {trace.planGeneration.rateI1F2.toFixed(1)} veh/c Vert
+                <br />
+                → 60 × {trace.planGeneration.ratioI1Pct}% ={' '}
+                <strong className="text-[#39ff14]">
+                  {trace.planGeneration.rawGreenI1} s → Plan {trace.planGeneration.proportionalPlan.g11}s / {trace.planGeneration.proportionalPlan.g12}s
+                </strong>
+              </div>
+              <div className="bg-[#111428] border-l-2 border-[#ffb800] px-2 py-1.5">
+                <strong>Cruce I2 (Av. 6 Ago / P. Salazar):</strong>{' '}
+                {trace.planGeneration.rateI2F1.toFixed(1)} veh/c Horiz vs. {trace.planGeneration.rateI2F2.toFixed(1)} veh/c Vert
+                <br />
+                → 60 × {trace.planGeneration.ratioI2Pct}% ={' '}
+                <strong className="text-[#39ff14]">
+                  {trace.planGeneration.rawGreenI2} s → Plan {trace.planGeneration.proportionalPlan.g21}s / {trace.planGeneration.proportionalPlan.g22}s
+                </strong>
+              </div>
+              <div className="bg-[#240b18] border-l-2 border-[#ff0055] px-2 py-1.5 text-[#ffc4d8]">
+                <strong>Plan Inverso generado (espejo):</strong>{' '}
+                I1: {trace.planGeneration.inversePlan.g11}s/{trace.planGeneration.inversePlan.g12}s · I2:{' '}
+                {trace.planGeneration.inversePlan.g21}s/{trace.planGeneration.inversePlan.g22}s
+              </div>
+            </div>
+          </div>
+
+          {/* Lista de todos los modelos/planes generados para el árbol */}
+          <div className="lg:col-span-3 bg-[#090a14] border-2 border-[#39ff14]/60 p-3 space-y-1.5">
+            <div className="font-pixel text-[9px] text-[#39ff14]">
+              3. {trace.candidates.length} PLANES GENERADOS EN ESTE ÁRBOL
+            </div>
+            <div className="space-y-1 text-[11px]">
+              {trace.candidates.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-[#111428] border border-[#243059] px-2 py-1 flex items-center justify-between gap-1"
+                >
+                  <span className="text-white font-bold truncate">{c.originTag}</span>
+                  <span className="font-mono-code text-[#00f0ff] shrink-0">
+                    {c.plan.g11}/{c.plan.g12} · {c.plan.g21}/{c.plan.g22}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -781,10 +892,10 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
                     }
                   >
                     <rect
-                      x={candX - 116}
-                      y={candY - 44}
-                      width={232}
-                      height={88}
+                      x={candX - 118}
+                      y={candY - 48}
+                      width={236}
+                      height={96}
                       fill={
                         isWinnerAtEnd
                           ? '#0f2b18'
@@ -810,10 +921,10 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
 
                     <text
                       x={candX}
-                      y={candY - 23}
+                      y={candY - 30}
                       textAnchor="middle"
                       fill={isWinnerAtEnd ? '#39ff14' : hasAnyPruned ? '#ff6b9a' : '#ffb800'}
-                      fontSize="11"
+                      fontSize="10"
                       fontFamily="JetBrains Mono, monospace"
                       fontWeight="bold"
                     >
@@ -822,7 +933,18 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
 
                     <text
                       x={candX}
-                      y={candY - 5}
+                      y={candY - 15}
+                      textAnchor="middle"
+                      fill="#00f0ff"
+                      fontSize="9"
+                      fontFamily="JetBrains Mono, monospace"
+                    >
+                      Origen: {cand.originTag}
+                    </text>
+
+                    <text
+                      x={candX}
+                      y={candY + 1}
                       textAnchor="middle"
                       fill="#d7e1fa"
                       fontSize="10"
@@ -833,9 +955,9 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
 
                     {/* Badge Alfa claro */}
                     <rect
-                      x={candX - 100}
-                      y={candY + 8}
-                      width={200}
+                      x={candX - 102}
+                      y={candY + 12}
+                      width={204}
                       height={24}
                       fill="#090a14"
                       stroke={
@@ -849,7 +971,7 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
                     />
                     <text
                       x={candX}
-                      y={candY + 24}
+                      y={candY + 28}
                       textAnchor="middle"
                       fill={
                         isWinnerAtEnd

@@ -104,6 +104,7 @@ export interface TraceSampleEval {
 export interface TraceCandidate {
   id: string;
   label: string;
+  originTag: string;
   plan: SignalPlan;
   isCurrentPlan: boolean;
   heuristicScore: number;
@@ -112,6 +113,23 @@ export interface TraceCandidate {
   prunedCount: number;
   selectedAsBest: boolean;
   samples: TraceSampleEval[];
+}
+
+export interface PlanGenerationFormulaInfo {
+  rateI1F1: number;
+  rateI1F2: number;
+  rateI2F1: number;
+  rateI2F2: number;
+  loadI1F1: number;
+  loadI1F2: number;
+  loadI2F1: number;
+  loadI2F2: number;
+  ratioI1Pct: number;
+  ratioI2Pct: number;
+  rawGreenI1: number;
+  rawGreenI2: number;
+  proportionalPlan: SignalPlan;
+  inversePlan: SignalPlan;
 }
 
 export type TraceStepType =
@@ -153,6 +171,7 @@ export interface AlphaBetaTrace {
   totalLeavesPossible: number;
   evaluatedLeaves: number;
   prunedLeaves: number;
+  planGeneration: PlanGenerationFormulaInfo;
   candidates: TraceCandidate[];
   steps: TraceStep[];
 }
