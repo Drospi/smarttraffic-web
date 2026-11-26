@@ -143,64 +143,108 @@ function drawTrafficLightUnit(
   color: 'green' | 'yellow' | 'red',
   countdown: number,
   label: string,
-  useSprites: boolean
+  orientation: 'vertical' | 'horizontal'
 ): void {
   const glowColor =
     color === 'green' ? NEON.green : color === 'yellow' ? NEON.amber : NEON.pink;
 
-  // Halo neón
   ctx.save();
-  ctx.fillStyle = glowColor;
-  ctx.globalAlpha = 0.22;
-  ctx.fillRect(x - 14, y - 22, 28, 44);
-  ctx.globalAlpha = 1;
 
-  // Caja del semáforo pixelado
-  ctx.fillStyle = '#090a14';
-  ctx.fillRect(x - 10, y - 19, 20, 38);
-  ctx.strokeStyle = glowColor;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x - 10, y - 19, 20, 38);
-
-  const spriteLightKey =
-    color === 'green' ? 'light_green' : color === 'yellow' ? 'light_yellow' : 'light_red';
-  const lightImg = useSprites ? spriteManager.getImage(spriteLightKey) : null;
-  const housingImg = useSprites ? spriteManager.getImage('traffic_light') : null;
-
-  if (lightImg) {
-    ctx.drawImage(lightImg, x - 8, y - 16, 16, 32);
-  } else if (housingImg) {
-    ctx.drawImage(housingImg, x - 9, y - 17, 18, 34);
+  if (orientation === 'vertical') {
+    // Semáforo VERTICAL (perpendicular a la avenida HORIZONTAL)
+    // Halo neón exterior
     ctx.fillStyle = glowColor;
-    ctx.fillRect(x - 3, color === 'red' ? y - 12 : color === 'yellow' ? y - 3 : y + 6, 6, 6);
-  } else {
-    // 3 luces pixeladas
+    ctx.globalAlpha = color === 'yellow' ? 0.34 : 0.22;
+    ctx.fillRect(x - 14, y - 24, 28, 48);
+    ctx.globalAlpha = 1;
+
+    // Carcasa vertical pixel-art
+    ctx.fillStyle = '#090a14';
+    ctx.fillRect(x - 10, y - 21, 20, 42);
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 10, y - 21, 20, 42);
+
+    // 3 luces verticales: Rojo arriba, Amarillo centro, Verde abajo
     ctx.fillStyle = color === 'red' ? NEON.pink : '#2d1220';
-    ctx.fillRect(x - 4, y - 14, 8, 8);
+    ctx.fillRect(x - 4, y - 16, 8, 8);
     ctx.fillStyle = color === 'yellow' ? NEON.amber : '#2e2510';
     ctx.fillRect(x - 4, y - 4, 8, 8);
     ctx.fillStyle = color === 'green' ? NEON.green : '#102e14';
-    ctx.fillRect(x - 4, y + 6, 8, 8);
+    ctx.fillRect(x - 4, y + 8, 8, 8);
+
+    // Cuenta regresiva debajo
+    ctx.fillStyle = '#090a14';
+    ctx.fillRect(x - 18, y + 24, 36, 15);
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - 18, y + 24, 36, 15);
+
+    ctx.fillStyle = glowColor;
+    ctx.font = 'bold 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${countdown}s`, x, y + 32);
+
+    ctx.fillStyle = NEON.muted;
+    ctx.font = 'bold 9px "JetBrains Mono", monospace';
+    ctx.fillText(label, x, y - 28);
+  } else {
+    // Semáforo HORIZONTAL (perpendicular a la calle VERTICAL)
+    ctx.fillStyle = glowColor;
+    ctx.globalAlpha = color === 'yellow' ? 0.34 : 0.22;
+    ctx.fillRect(x - 24, y - 14, 48, 28);
+    ctx.globalAlpha = 1;
+
+    // Carcasa horizontal pixel-art
+    ctx.fillStyle = '#090a14';
+    ctx.fillRect(x - 21, y - 10, 42, 20);
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 21, y - 10, 42, 20);
+
+    // 3 luces horizontales: Rojo izquierda, Amarillo centro, Verde derecha
+    ctx.fillStyle = color === 'red' ? NEON.pink : '#2d1220';
+    ctx.fillRect(x - 16, y - 4, 8, 8);
+    ctx.fillStyle = color === 'yellow' ? NEON.amber : '#2e2510';
+    ctx.fillRect(x - 4, y - 4, 8, 8);
+    ctx.fillStyle = color === 'green' ? NEON.green : '#102e14';
+    ctx.fillRect(x + 8, y - 4, 8, 8);
+
+    // Cuenta regresiva a la derecha o debajo
+    ctx.fillStyle = '#090a14';
+    ctx.fillRect(x - 18, y + 13, 36, 15);
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - 18, y + 13, 36, 15);
+
+    ctx.fillStyle = glowColor;
+    ctx.font = 'bold 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${countdown}s`, x, y + 21);
+
+    ctx.fillStyle = NEON.muted;
+    ctx.font = 'bold 9px "JetBrains Mono", monospace';
+    ctx.fillText(label, x, y - 17);
   }
 
-  // Etiqueta y cuenta regresiva en segundos exactos
-  ctx.fillStyle = '#090a14';
-  ctx.fillRect(x - 18, y + 22, 36, 15);
-  ctx.strokeStyle = glowColor;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(x - 18, y + 22, 36, 15);
-
-  ctx.fillStyle = glowColor;
-  ctx.font = 'bold 10px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`${countdown}s`, x, y + 30);
-
-  ctx.fillStyle = NEON.muted;
-  ctx.font = 'bold 9px "JetBrains Mono", monospace';
-  ctx.fillText(label, x, y - 26);
-
   ctx.restore();
+}
+
+/**
+ * Mapeo lineal por tramos sincronizado exactamente con los hitos de simulator.ts
+ * para que cada auto frene justo en la línea blanca del paso de cebra y despeje el cuadrado.
+ */
+function mapPiecewise(t: number, knots: readonly number[], values: readonly number[]): number {
+  if (t <= knots[0]) return values[0];
+  for (let i = 0; i < knots.length - 1; i += 1) {
+    if (t <= knots[i + 1]) {
+      const local = (t - knots[i]) / Math.max(1e-6, knots[i + 1] - knots[i]);
+      return values[i] + local * (values[i + 1] - values[i]);
+    }
+  }
+  return values[values.length - 1];
 }
 
 function drawLinkBar(
@@ -249,10 +293,10 @@ function drawQueueBadge(
 ): void {
   const color = queueValue >= 18 ? NEON.pink : queueValue >= 10 ? NEON.amber : NEON.cyan;
   ctx.fillStyle = 'rgba(9, 10, 20, 0.92)';
-  ctx.fillRect(x - 42, y - 11, 84, 22);
+  ctx.fillRect(x - 44, y - 11, 88, 22);
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
-  ctx.strokeRect(x - 42, y - 11, 84, 22);
+  ctx.strokeRect(x - 44, y - 11, 88, 22);
 
   ctx.fillStyle = color;
   ctx.font = 'bold 10px "JetBrains Mono", monospace';
@@ -262,8 +306,131 @@ function drawQueueBadge(
 }
 
 /**
- * Renderizador principal del corredor Pérez Velasco (I1) — Acceso Autopista / Av. Montes (I2)
- * en HTML5 Canvas 2D con estilo Retro Pixel-Art Neón y soporte automático para sprites.
+ * Dibuja el nombre de una calle orientado exactamente a lo largo de la vía:
+ * - angleRad = 0 para avenidas horizontales
+ * - angleRad = -Math.PI / 2 para calles verticales
+ */
+function drawStreetNameAlongRoad(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  text: string,
+  angleRad: number,
+  color: string,
+  compact?: boolean
+): void {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.rotate(angleRad);
+  ctx.font = compact
+    ? 'bold 8px "JetBrains Mono", monospace'
+    : 'bold 10px "JetBrains Mono", monospace';
+  const metrics = ctx.measureText(text);
+  const padX = 6;
+  const boxW = Math.ceil(metrics.width) + padX * 2;
+  const boxH = compact ? 13 : 16;
+
+  ctx.fillStyle = 'rgba(9, 10, 20, 0.78)';
+  ctx.fillRect(-Math.round(boxW / 2), -Math.round(boxH / 2), boxW, boxH);
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-Math.round(boxW / 2), -Math.round(boxH / 2), boxW, boxH);
+
+  ctx.globalAlpha = 0.95;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 0, 0.5);
+  ctx.restore();
+}
+
+/**
+ * Dibuja Plaza Avaroa en estilo Retro Pixel-Art Neón en el cuadrante Noroeste
+ * (bordeada por C. Belisario Salinas al norte, Av. 20 de Octubre al este y C. Pedro Salazar al sur).
+ */
+function drawPlazaAvaroa(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  compact?: boolean
+): void {
+  if (w < 40 || h < 34) return;
+
+  // Césped nocturno oscuro
+  ctx.fillStyle = '#0a2216';
+  ctx.fillRect(x, y, w, h);
+
+  // Borde verde neón
+  ctx.strokeStyle = NEON.green;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+
+  // Senderos diagonales pixelados y cruz central
+  const cx = Math.round(x + w / 2);
+  const cy = Math.round(y + h / 2);
+  ctx.strokeStyle = 'rgba(57, 255, 20, 0.25)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y + 6);
+  ctx.lineTo(x + w - 6, y + h - 6);
+  ctx.moveTo(x + w - 6, y + 6);
+  ctx.lineTo(x + 6, y + h - 6);
+  ctx.moveTo(cx, y + 4);
+  ctx.lineTo(cx, y + h - 4);
+  ctx.moveTo(x + 4, cy);
+  ctx.lineTo(x + w - 4, cy);
+  ctx.stroke();
+
+  // Árboles pixel-art en las esquinas
+  const treeOffsets = [
+    [x + 16, y + 16],
+    [x + w - 16, y + 16],
+    [x + 16, y + h - 16],
+    [x + w - 16, y + h - 16],
+  ] as const;
+  for (const [tx, ty] of treeOffsets) {
+    ctx.fillStyle = '#14522d';
+    ctx.fillRect(tx - 6, ty - 6, 12, 12);
+    ctx.fillStyle = NEON.green;
+    ctx.fillRect(tx - 3, ty - 3, 6, 6);
+  }
+
+  // Monumento / Fuente central de Eduardo Avaroa
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
+  ctx.fillRect(cx - 12, cy - 12, 24, 24);
+  ctx.fillStyle = '#111428';
+  ctx.fillRect(cx - 8, cy - 8, 16, 16);
+  ctx.strokeStyle = NEON.cyan;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - 8, cy - 8, 16, 16);
+  ctx.fillStyle = NEON.cyan;
+  ctx.fillRect(cx - 3, cy - 3, 6, 6);
+
+  // Cartel pixel-art "PLAZA AVAROA"
+  const badgeW = Math.min(w - 12, compact ? 96 : 118);
+  const badgeH = compact ? 15 : 18;
+  ctx.fillStyle = 'rgba(9, 10, 20, 0.9)';
+  ctx.fillRect(cx - Math.round(badgeW / 2), y + h - badgeH - 5, badgeW, badgeH);
+  ctx.strokeStyle = NEON.green;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(cx - Math.round(badgeW / 2), y + h - badgeH - 5, badgeW, badgeH);
+
+  ctx.fillStyle = NEON.green;
+  ctx.font = compact
+    ? 'bold 8px "JetBrains Mono", monospace'
+    : 'bold 10px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PLAZA AVAROA', cx, y + h - Math.round(badgeH / 2) - 4);
+}
+
+/**
+ * Renderizador principal del corredor Sopocachi, La Paz:
+ * Plaza Avaroa / Av. 20 de Octubre (I1) — Av. 6 de Agosto (I2),
+ * conectados por C. Pedro Salazar y C. Belisario Salinas.
  */
 export function renderCorridorCanvas(
   ctx: CanvasRenderingContext2D,
@@ -296,33 +463,46 @@ export function renderCorridorCanvas(
     ctx.stroke();
   }
 
-  // Geometría proporcional
-  const roadH = compact ? 76 : 92;
-  const roadW = compact ? 72 : 84;
-  const centerY = Math.round(height * 0.54);
-  const i1X = Math.round(width * 0.28);
+  // Geometría proporcional (Sopocachi — Plaza Avaroa)
+  const roadH = compact ? 74 : 90;
+  const roadW = compact ? 70 : 84;
+  const centerY = Math.round(height * 0.58);
+  const i1X = Math.round(width * 0.29);
   const i2X = Math.round(width * 0.72);
   const halfRoadH = Math.round(roadH / 2);
   const halfRoadW = Math.round(roadW / 2);
 
-  // 2. Edificios pixel-art urbanos (La Paz nocturno)
-  const bPad = 14;
-  drawPixelBuilding(ctx, bPad, 44, i1X - halfRoadW - bPad * 2, centerY - halfRoadH - 58, NEON.cyan, 1);
+  // Franja superior: C. Belisario Salinas (borde norte de Plaza Avaroa)
+  const belisarioH = compact ? 22 : 28;
+  const belisarioTop = compact ? 42 : 48;
+  const belisarioMidY = belisarioTop + Math.round(belisarioH / 2);
+  const belisarioBottom = belisarioTop + belisarioH;
+
+  // 2. Bloques urbanos + PLAZA AVAROA (cuadrante noroeste entre Belisario Salinas, 20 de Octubre y Pedro Salazar)
+  const bPad = 10;
+  drawPlazaAvaroa(
+    ctx,
+    bPad,
+    belisarioBottom + 6,
+    i1X - halfRoadW - bPad * 2,
+    centerY - halfRoadH - belisarioBottom - 16,
+    compact
+  );
   drawPixelBuilding(
     ctx,
     i1X + halfRoadW + bPad,
-    44,
+    belisarioBottom + 8,
     i2X - i1X - roadW - bPad * 2,
-    Math.max(36, centerY - halfRoadH - 86),
+    Math.max(24, centerY - halfRoadH - belisarioBottom - 54),
     NEON.amber,
     2
   );
   drawPixelBuilding(
     ctx,
     i2X + halfRoadW + bPad,
-    44,
+    belisarioBottom + 8,
     width - (i2X + halfRoadW) - bPad * 2,
-    centerY - halfRoadH - 58,
+    Math.max(24, centerY - halfRoadH - belisarioBottom - 20),
     NEON.pink,
     3
   );
@@ -332,7 +512,7 @@ export function renderCorridorCanvas(
     centerY + halfRoadH + bPad,
     i1X - halfRoadW - bPad * 2,
     height - (centerY + halfRoadH) - bPad * 2,
-    NEON.green,
+    NEON.cyan,
     4
   );
   drawPixelBuilding(
@@ -340,7 +520,7 @@ export function renderCorridorCanvas(
     i1X + halfRoadW + bPad,
     centerY + halfRoadH + 34,
     i2X - i1X - roadW - bPad * 2,
-    Math.max(32, height - (centerY + halfRoadH) - 48),
+    Math.max(24, height - (centerY + halfRoadH) - 46),
     NEON.cyan,
     5
   );
@@ -358,11 +538,27 @@ export function renderCorridorCanvas(
   const roadSprite = useSprites ? spriteManager.getImage('road_tile') : null;
   const interSprite = useSprites ? spriteManager.getImage('road_intersection') : null;
 
-  // Asfalto base horizontal y vertical
+  // Asfalto base: C. Belisario Salinas (arriba), C. Pedro Salazar (eje principal) y Av. 20 de Octubre / Av. 6 de Agosto
+  ctx.fillStyle = '#14192d';
+  ctx.fillRect(0, belisarioTop, width, belisarioH);
+  ctx.fillStyle = '#2a3560';
+  ctx.fillRect(0, belisarioTop - 2, width, 2);
+  ctx.fillRect(0, belisarioBottom, width, 2);
+
   ctx.fillStyle = NEON.asphalt;
   ctx.fillRect(0, centerY - halfRoadH, width, roadH);
   ctx.fillRect(i1X - halfRoadW, 38, roadW, height - 38);
   ctx.fillRect(i2X - halfRoadW, 38, roadW, height - 38);
+
+  // Líneas discontinuas amarillas en C. Belisario Salinas
+  ctx.fillStyle = 'rgba(255, 184, 0, 0.72)';
+  for (let x = 8; x < width; x += 22) {
+    const inI1 = x > i1X - halfRoadW - 4 && x < i1X + halfRoadW + 4;
+    const inI2 = x > i2X - halfRoadW - 4 && x < i2X + halfRoadW + 4;
+    if (!inI1 && !inI2) {
+      ctx.fillRect(x, belisarioMidY - 1, 10, 2);
+    }
+  }
 
   if (roadSprite) {
     // Textura pixel-art sutil encima del asfalto
@@ -389,19 +585,23 @@ export function renderCorridorCanvas(
     ctx.restore();
   }
 
-  // Bordes neón de las calzadas
-  ctx.fillStyle = NEON.asphaltEdge;
-  ctx.fillRect(0, centerY - halfRoadH - 2, width, 2);
-  ctx.fillRect(0, centerY + halfRoadH, width, 2);
-  ctx.fillRect(i1X - halfRoadW - 2, 38, 2, height - 38);
-  ctx.fillRect(i1X + halfRoadW, 38, 2, height - 38);
-  ctx.fillRect(i2X - halfRoadW - 2, 38, 2, height - 38);
-  ctx.fillRect(i2X + halfRoadW, 38, 2, height - 38);
+  // Bordes neón nítidos de las calzadas y aceras
+  ctx.fillStyle = '#2d3a6b';
+  ctx.fillRect(0, centerY - halfRoadH - 3, width, 3);
+  ctx.fillRect(0, centerY + halfRoadH, width, 3);
+  ctx.fillRect(i1X - halfRoadW - 3, 38, 3, height - 38);
+  ctx.fillRect(i1X + halfRoadW, 38, 3, height - 38);
+  ctx.fillRect(i2X - halfRoadW - 3, 38, 3, height - 38);
+  ctx.fillRect(i2X + halfRoadW, 38, 3, height - 38);
 
-  // Cajas de intersección limpias
+  // Cajas de intersección limpias con borde sutil
   ctx.fillStyle = '#1b223d';
   ctx.fillRect(i1X - halfRoadW, centerY - halfRoadH, roadW, roadH);
   ctx.fillRect(i2X - halfRoadW, centerY - halfRoadH, roadW, roadH);
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.22)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(i1X - halfRoadW + 1, centerY - halfRoadH + 1, roadW - 2, roadH - 2);
+  ctx.strokeRect(i2X - halfRoadW + 1, centerY - halfRoadH + 1, roadW - 2, roadH - 2);
 
   // Líneas amarillas discontinuas centrales (horizontal y verticales)
   ctx.fillStyle = NEON.amber;
@@ -419,8 +619,8 @@ export function renderCorridorCanvas(
     }
   }
 
-  // Pasos de cebra (crosswalks) en I1 e I2
-  ctx.fillStyle = 'rgba(230, 237, 247, 0.42)';
+  // Líneas blancas de parada + Pasos de cebra (crosswalks) en I1 e I2
+  ctx.fillStyle = 'rgba(230, 237, 247, 0.45)';
   for (const ix of [i1X, i2X]) {
     for (let s = -halfRoadH + 6; s < halfRoadH - 6; s += 10) {
       ctx.fillRect(ix - halfRoadW - 10, centerY + s, 7, 5);
@@ -431,15 +631,119 @@ export function renderCorridorCanvas(
       ctx.fillRect(ix + s, centerY + halfRoadH + 3, 5, 7);
     }
   }
+  // Líneas de detención blancas frente a cada paso de cebra (respetando sentidos reales del mapa de Sopocachi)
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+  // Horizontales: C. Pedro Salazar (Oeste -> Este) y Retorno Belisario Salinas (Este -> Oeste)
+  ctx.fillRect(i1X - halfRoadW - 15, centerY + 3, 3, halfRoadH - 5);
+  ctx.fillRect(i2X - halfRoadW - 15, centerY + 3, 3, halfRoadH - 5);
+  ctx.fillRect(i2X + halfRoadW + 12, centerY - halfRoadH + 2, 3, halfRoadH - 5);
+  ctx.fillRect(i1X + halfRoadW + 12, centerY - halfRoadH + 2, 3, halfRoadH - 5);
+  // Verticales reales: Av. 20 de Octubre sube (Sur -> Norte, línea al sur de I1) y Av. 6 de Agosto baja (Norte -> Sur, línea al norte de I2)
+  ctx.fillRect(i1X + 3, centerY + halfRoadH + 12, halfRoadW - 5, 3);
+  ctx.fillRect(i2X - halfRoadW + 2, centerY - halfRoadH - 15, halfRoadW - 5, 3);
 
-  // Flechas de dirección en los tramos conectores R12 (Este) y R21 (Oeste)
+  // Nombres de calles orientados A LO LARGO DE CADA VÍA (horizontal en horizontales, vertical en verticales)
   const midX = Math.round((i1X + i2X) / 2);
-  ctx.fillStyle = 'rgba(0, 240, 255, 0.35)';
-  ctx.font = 'bold 11px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('<<< R21 (I2 → I1) <<<', midX, centerY - Math.round(halfRoadH / 2));
-  ctx.fillText('>>> R12 (I1 → I2) >>>', midX, centerY + Math.round(halfRoadH / 2));
+  const westMidX = Math.round((i1X - halfRoadW) / 2);
+  const eastMidX = Math.round((i2X + halfRoadW + width) / 2);
+  const northMidY = Math.round((belisarioBottom + (centerY - halfRoadH)) / 2);
+  const southMidY = Math.round((centerY + halfRoadH + height) / 2);
+
+  // Calle horizontal superior: C. Belisario Salinas (borde norte de Plaza Avaroa)
+  drawStreetNameAlongRoad(
+    ctx,
+    midX,
+    belisarioMidY,
+    compact ? '← C. BELISARIO SALINAS ←' : '← C. BELISARIO SALINAS (HACIA PLAZA AVAROA) ←',
+    0,
+    NEON.green,
+    compact
+  );
+  drawStreetNameAlongRoad(
+    ctx,
+    westMidX,
+    belisarioMidY,
+    compact ? '← BELISARIO SALINAS' : '← C. BELISARIO SALINAS',
+    0,
+    NEON.green,
+    compact
+  );
+
+  // Avenida Horizontal Principal: C. Pedro Salazar (nombres en horizontal a lo largo de la vía)
+  drawStreetNameAlongRoad(
+    ctx,
+    westMidX,
+    centerY - Math.round(halfRoadH * 0.52),
+    compact ? 'C. PEDRO SALAZAR →' : 'C. PEDRO SALAZAR (F1) →',
+    0,
+    NEON.cyan,
+    compact
+  );
+  drawStreetNameAlongRoad(
+    ctx,
+    eastMidX,
+    centerY + Math.round(halfRoadH * 0.52),
+    compact ? '← C. PEDRO SALAZAR' : '← C. PEDRO SALAZAR (F1)',
+    0,
+    NEON.cyan,
+    compact
+  );
+  drawStreetNameAlongRoad(
+    ctx,
+    midX,
+    centerY - Math.round(halfRoadH * 0.52),
+    compact ? '← R21 · HACIA P. AVAROA ←' : '← R21 · 6 AGO → 20 OCT / P. AVAROA ←',
+    0,
+    '#7cefff',
+    compact
+  );
+  drawStreetNameAlongRoad(
+    ctx,
+    midX,
+    centerY + Math.round(halfRoadH * 0.52),
+    compact ? '→ R12 · PEDRO SALAZAR →' : '→ R12 · C. PEDRO SALAZAR (20 OCT → 6 AGO) →',
+    0,
+    '#7cefff',
+    compact
+  );
+
+  // Avenidas Verticales (nombres rotados EN VERTICAL a lo largo de cada avenida, respetando sentidos reales)
+  drawStreetNameAlongRoad(
+    ctx,
+    i1X - Math.round(halfRoadW * 0.48),
+    northMidY,
+    compact ? '↑ AV. 20 OCT ↑' : '↑ AV. 20 DE OCTUBRE ↑',
+    -Math.PI / 2,
+    NEON.amber,
+    compact
+  );
+  drawStreetNameAlongRoad(
+    ctx,
+    i1X - Math.round(halfRoadW * 0.48),
+    southMidY,
+    compact ? '↑ 20 DE OCTUBRE ↑' : '↑ AV. 20 DE OCTUBRE (F2) ↑',
+    -Math.PI / 2,
+    NEON.amber,
+    compact
+  );
+  drawStreetNameAlongRoad(
+    ctx,
+    i2X + Math.round(halfRoadW * 0.48),
+    northMidY,
+    compact ? '↓ 6 DE AGOSTO ↓' : '↓ AV. 6 DE AGOSTO (F2) ↓',
+    -Math.PI / 2,
+    NEON.amber,
+    compact
+  );
+  drawStreetNameAlongRoad(
+    ctx,
+    i2X + Math.round(halfRoadW * 0.48),
+    southMidY,
+    compact ? '↓ AV. 6 AGOSTO ↓' : '↓ AV. 6 DE AGOSTO ↓',
+    -Math.PI / 2,
+    NEON.amber,
+    compact
+  );
 
   // 4. Barras neón de ocupación de tramos R12 y R21 (0–24 veh)
   const barW = Math.max(150, Math.min(230, i2X - i1X - roadW - 36));
@@ -470,6 +774,45 @@ export function renderCorridorCanvas(
   const carKeys: readonly CanonicalSpriteKey[] = ['car_cyan', 'car_yellow', 'car_pink'];
   const carLen = compact ? 22 : 26;
   const carWid = compact ? 13 : 15;
+  const halfCarLen = Math.round(carLen / 2);
+
+  // Hitos de mapeo sincronizados exactamente con simulator.ts
+  const hKnots = [0, 0.21, 0.36, 0.63, 0.78, 1] as const;
+  const vKnots = [0, 0.34, 0.64, 1] as const;
+
+  const i1F1Values = [
+    -26,
+    i1X - halfRoadW - 17 - halfCarLen,
+    i1X + halfRoadW + 14 + halfCarLen,
+    i2X - halfRoadW - 17 - halfCarLen,
+    i2X + halfRoadW + 14 + halfCarLen,
+    width + 26,
+  ] as const;
+
+  const i2F1Values = [
+    width + 26,
+    i2X + halfRoadW + 17 + halfCarLen,
+    i2X - halfRoadW - 14 - halfCarLen,
+    i1X + halfRoadW + 17 + halfCarLen,
+    i1X - halfRoadW - 14 - halfCarLen,
+    -26,
+  ] as const;
+
+  // Av. 20 de Octubre (I1-F2): sube de Sur a Norte (↑) bordeando Plaza Avaroa
+  const i1F2Values = [
+    height + 26,
+    centerY + halfRoadH + 17 + halfCarLen,
+    centerY - halfRoadH - 14 - halfCarLen,
+    38,
+  ] as const;
+
+  // Av. 6 de Agosto (I2-F2): baja de Norte a Sur (↓) hacia Macario Pinilla
+  const i2F2Values = [
+    38,
+    centerY - halfRoadH - 17 - halfCarLen,
+    centerY + halfRoadH + 14 + halfCarLen,
+    height + 26,
+  ] as const;
 
   for (const car of cars) {
     let x: number;
@@ -477,33 +820,23 @@ export function renderCorridorCanvas(
     let angle: number;
 
     if (car.approach === 'I1-F1') {
-      // Oeste -> Este pasando por I1 hacia R12
-      const startX = -16;
-      const endX = midX + 36;
-      x = startX + car.progress * (endX - startX);
-      y = centerY + Math.round(halfRoadH * 0.5) + (car.laneIndex === 0 ? -4 : 5);
+      x = mapPiecewise(car.progress, hKnots, i1F1Values);
+      y = centerY + Math.round(halfRoadH * 0.5) + (car.laneIndex === 0 ? -2 : 2);
       angle = 0;
     } else if (car.approach === 'I2-F1') {
-      // Este -> Oeste pasando por I2 hacia R21
-      const startX = width + 16;
-      const endX = midX - 36;
-      x = startX + car.progress * (endX - startX);
-      y = centerY - Math.round(halfRoadH * 0.5) + (car.laneIndex === 0 ? -5 : 4);
+      x = mapPiecewise(car.progress, hKnots, i2F1Values);
+      y = centerY - Math.round(halfRoadH * 0.5) + (car.laneIndex === 0 ? -2 : 2);
       angle = Math.PI;
     } else if (car.approach === 'I1-F2') {
-      // Norte -> Sur cruzando I1
-      const startY = 38;
-      const endY = height + 16;
-      x = i1X - Math.round(halfRoadW * 0.42) + (car.laneIndex === 0 ? -3 : 6);
-      y = startY + car.progress * (endY - startY);
-      angle = Math.PI / 2;
-    } else {
-      // Sur -> Norte cruzando I2
-      const startY = height + 16;
-      const endY = 38;
-      x = i2X + Math.round(halfRoadW * 0.42) + (car.laneIndex === 0 ? -6 : 3);
-      y = startY + car.progress * (endY - startY);
+      // Av. 20 de Octubre: Sur -> Norte (↑)
+      x = i1X + Math.round(halfRoadW * 0.45) + (car.laneIndex === 0 ? -2 : 2);
+      y = mapPiecewise(car.progress, vKnots, i1F2Values);
       angle = -Math.PI / 2;
+    } else {
+      // Av. 6 de Agosto: Norte -> Sur (↓)
+      x = i2X - Math.round(halfRoadW * 0.45) + (car.laneIndex === 0 ? -2 : 2);
+      y = mapPiecewise(car.progress, vKnots, i2F2Values);
+      angle = Math.PI / 2;
     }
 
     ctx.save();
@@ -527,7 +860,9 @@ export function renderCorridorCanvas(
     ctx.restore();
   }
 
-  // 6. Semáforos pixelados con halo neón y cuenta regresiva exacta
+  // 6. Semáforos pixelados PERPENDICULARES a la vía que controlan:
+  //    - C. Pedro Salazar horizontal (I1-F1, I2-F1) => Semáforo VERTICAL
+  //    - Av. 20 de Octubre / Av. 6 de Agosto vertical (I1-F2, I2-F2) => Semáforo HORIZONTAL
   const i1F1Color = getApproachLightColor(world.phaseI1, true);
   const i1F2Color = getApproachLightColor(world.phaseI1, false);
   const i2F1Color = getApproachLightColor(world.phaseI2, true);
@@ -536,20 +871,20 @@ export function renderCorridorCanvas(
   drawTrafficLightUnit(
     ctx,
     i1X - halfRoadW - 26,
-    centerY + halfRoadH + 24,
+    centerY + halfRoadH + 26,
     i1F1Color,
     world.remainingPhaseI1,
     'I1-F1',
-    useSprites
+    'vertical'
   );
   drawTrafficLightUnit(
     ctx,
-    i1X + halfRoadW + 26,
-    centerY - halfRoadH - 26,
+    i1X + halfRoadW + 34,
+    centerY + halfRoadH + 22,
     i1F2Color,
     world.remainingPhaseI1,
     'I1-F2',
-    useSprites
+    'horizontal'
   );
   drawTrafficLightUnit(
     ctx,
@@ -558,40 +893,40 @@ export function renderCorridorCanvas(
     i2F1Color,
     world.remainingPhaseI2,
     'I2-F1',
-    useSprites
+    'vertical'
   );
   drawTrafficLightUnit(
     ctx,
-    i2X - halfRoadW - 26,
-    centerY + halfRoadH + 24,
+    i2X - halfRoadW - 34,
+    centerY - halfRoadH - 28,
     i2F2Color,
     world.remainingPhaseI2,
     'I2-F2',
-    useSprites
+    'horizontal'
   );
 
-  // 7. Etiquetas de colas en los 4 accesos
-  drawQueueBadge(ctx, Math.max(58, i1X - halfRoadW - 76), centerY + halfRoadH - 18, 'I1-F1', world.queues['I1-F1']);
-  drawQueueBadge(ctx, i1X, 62, 'I1-F2', world.queues['I1-F2']);
-  drawQueueBadge(ctx, Math.min(width - 58, i2X + halfRoadW + 76), centerY - halfRoadH + 18, 'I2-F1', world.queues['I2-F1']);
-  drawQueueBadge(ctx, i2X, height - 20, 'I2-F2', world.queues['I2-F2']);
+  // 7. Etiquetas de colas en los 4 accesos (ubicadas en las aceras sin tapar Plaza Avaroa ni nombres de calles)
+  drawQueueBadge(ctx, Math.max(54, i1X - halfRoadW - 92), centerY + halfRoadH + 22, 'I1-F1', world.queues['I1-F1']);
+  drawQueueBadge(ctx, Math.max(54, i1X - halfRoadW - 56), height - 20, 'I1-F2', world.queues['I1-F2']);
+  drawQueueBadge(ctx, Math.min(width - 54, i2X + halfRoadW + 92), centerY - halfRoadH - 22, 'I2-F1', world.queues['I2-F1']);
+  drawQueueBadge(ctx, Math.min(width - 54, i2X + halfRoadW + 56), belisarioBottom + 20, 'I2-F2', world.queues['I2-F2']);
 
   // 8. Nombres de las intersecciones en el centro
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-  ctx.font = 'bold 10px "JetBrains Mono", monospace';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.font = 'bold 9px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('I1', i1X, centerY - 6);
+  ctx.fillText('I1 · 20 OCT', i1X, centerY - 6);
   ctx.fillStyle = NEON.cyan;
   ctx.font = 'bold 8px "JetBrains Mono", monospace';
-  ctx.fillText('P. VELASCO', i1X, centerY + 7);
+  ctx.fillText('P. SALAZAR', i1X, centerY + 7);
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-  ctx.font = 'bold 10px "JetBrains Mono", monospace';
-  ctx.fillText('I2', i2X, centerY - 6);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.font = 'bold 9px "JetBrains Mono", monospace';
+  ctx.fillText('I2 · 6 AGO', i2X, centerY - 6);
   ctx.fillStyle = NEON.cyan;
   ctx.font = 'bold 8px "JetBrains Mono", monospace';
-  ctx.fillText('AV. MONTES', i2X, centerY + 7);
+  ctx.fillText('P. SALAZAR', i2X, centerY + 7);
 
   // 9. Barra superior HUD del Canvas (identidad del controlador y plan vigente)
   const accent = mode === 'smart' ? NEON.cyan : NEON.amber;

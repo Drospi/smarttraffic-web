@@ -1,5 +1,5 @@
 import { createSeededRng } from './prng';
-import { formatPlanShort, planKey, validatePSR } from './psr';
+import { clampPlanToPSR, formatPlanShort, planKey, validatePSR } from './psr';
 import { evaluatePlanOnSample } from './trafficModel';
 import type {
   AlphaBetaTrace,
@@ -27,27 +27,44 @@ interface OrderedHorizonSample {
 }
 
 /**
+ * Calcula las proporciones de carga real proyectada sobre el horizonte H
+ * para que la heurística detecte al instante tanto picos horizontales como inversiones hacia verticales.
+ */
+function computeDemandRatios(
+  queues: ApproachRecord,
+  links: LinkOccupancy,
+  rates: ApproachRecord,
+  horizon: number
+): { targetRatioI1: number; targetRatioI2: number } {
+  // Proyección sobre H ciclos (cola inicial + llegadas por ciclo * H + aporte del tramo entrante)
+  const loadI1F1 = queues['I1-F1'] + rates['I1-F1'] * horizon + links.R21 * 0.7;
+  const loadI1F2 = queues['I1-F2'] + rates['I1-F2'] * horizon;
+  const loadI2F1 = queues['I2-F1'] + rates['I2-F1'] * horizon + links.R12 * 0.7;
+  const loadI2F2 = queues['I2-F2'] + rates['I2-F2'] * horizon;
+
+  return {
+    targetRatioI1: loadI1F1 / Math.max(1, loadI1F1 + loadI1F2),
+    targetRatioI2: loadI2F1 / Math.max(1, loadI2F1 + loadI2F2),
+  };
+}
+
+/**
  * Heurística de ordenamiento (Move Ordering):
- * Prioriza planes cuyo reparto de verde se alinea con la presión actual de colas y tramos R12/R21.
+ * Prioriza planes cuyo reparto de verde se alinea con la carga proyectada de vehículos por ciclo, colas y tramos R12/R21.
  */
 function scorePlanHeuristic(
   plan: SignalPlan,
   queues: ApproachRecord,
   links: LinkOccupancy,
-  rates: ApproachRecord
+  rates: ApproachRecord,
+  horizon: number
 ): number {
-  const pressureI1F1 = queues['I1-F1'] + rates['I1-F1'] * 1.15 + links.R21 * 0.7;
-  const pressureI1F2 = queues['I1-F2'] + rates['I1-F2'] * 1.15;
-  const pressureI2F1 = queues['I2-F1'] + rates['I2-F1'] * 1.15 + links.R12 * 0.7;
-  const pressureI2F2 = queues['I2-F2'] + rates['I2-F2'] * 1.15;
-
-  const targetRatioI1 = pressureI1F1 / Math.max(1, pressureI1F1 + pressureI1F2);
-  const targetRatioI2 = pressureI2F1 / Math.max(1, pressureI2F1 + pressureI2F2);
+  const { targetRatioI1, targetRatioI2 } = computeDemandRatios(queues, links, rates, horizon);
 
   const actualRatioI1 = plan.g11 / 60;
   const actualRatioI2 = plan.g21 / 60;
 
-  // Menor distancia = mejor candidato (más cercano a la proporción óptima de colas)
+  // Menor distancia = mejor candidato (más cercano a la proporción óptima de carga real)
   const diffI1 = Math.abs(actualRatioI1 - targetRatioI1);
   const diffI2 = Math.abs(actualRatioI2 - targetRatioI2);
 
@@ -59,15 +76,17 @@ function scorePlanHeuristic(
 }
 
 /**
- * Búsqueda Local (hasta 2 iteraciones de vecindario Δg ∈ {-6, -3, 0, +3, +6})
- * estrictamente filtrada por el validador PSR y ordenada heurísticamente.
+ * Búsqueda Local + Plan Objetivo Heurístico + Anclas PSR (estrictamente filtrados por PSR).
+ * Permite reaccionar de inmediato (en 1 sola decisión) incluso ante inversiones completas de tráfico
+ * (ej. de 44s/16s horizontal a 20s/40s vertical).
  */
 function generateOrderedCandidates(
   currentPlan: SignalPlan,
   queues: ApproachRecord,
   links: LinkOccupancy,
   rates: ApproachRecord,
-  maxCandidates = 7
+  horizon: number,
+  maxCandidates = 6
 ): RawCandidate[] {
   const seen = new Map<string, RawCandidate>();
 
@@ -79,39 +98,44 @@ function generateOrderedCandidates(
       seen.set(key, {
         plan,
         isCurrentPlan,
-        heuristicScore: scorePlanHeuristic(plan, queues, links, rates),
+        heuristicScore: scorePlanHeuristic(plan, queues, links, rates, horizon),
       });
     }
   };
 
-  // Asegurar plan vigente primero
+  // 1) Asegurar plan vigente primero (fija cota inicial Beta)
   tryAdd({ ...currentPlan }, true);
 
-  // Iteración 1: vecinos directos desde el plan vigente
+  // 2) Plan objetivo proporcional directo a los vehículos/ciclo y colas actuales + su vecindario Δg
+  const { targetRatioI1, targetRatioI2 } = computeDemandRatios(queues, links, rates, horizon);
+  const targetPlan = clampPlanToPSR(Math.round(60 * targetRatioI1), Math.round(60 * targetRatioI2));
+  tryAdd(targetPlan, false);
+
   for (const d1 of DELTA_STEPS) {
     for (const d2 of DELTA_STEPS) {
       if (d1 === 0 && d2 === 0) continue;
-      const g11 = currentPlan.g11 + d1;
-      const g21 = currentPlan.g21 + d2;
-      tryAdd({ g11, g12: 60 - g11, g21, g22: 60 - g21 }, false);
+      // Vecinos alrededor del plan objetivo (reacción instantánea en inversiones)
+      const tg11 = targetPlan.g11 + d1;
+      const tg21 = targetPlan.g21 + d2;
+      tryAdd({ g11: tg11, g12: 60 - tg11, g21: tg21, g22: 60 - tg21 }, false);
+
+      // Vecinos alrededor del plan vigente (búsqueda local clásica)
+      const cg11 = currentPlan.g11 + d1;
+      const cg21 = currentPlan.g21 + d2;
+      tryAdd({ g11: cg11, g12: 60 - cg11, g21: cg21, g22: 60 - cg21 }, false);
     }
   }
 
-  // Seleccionar el mejor vecino heurístico para expandir una 2da iteración de búsqueda local
-  const iter1Sorted = Array.from(seen.values())
-    .filter((c) => !c.isCurrentPlan)
-    .sort((a, b) => b.heuristicScore - a.heuristicScore);
-
-  const pivot = iter1Sorted[0];
-  if (pivot) {
-    for (const d1 of DELTA_STEPS) {
-      for (const d2 of DELTA_STEPS) {
-        if (d1 === 0 && d2 === 0) continue;
-        const g11 = pivot.plan.g11 + d1;
-        const g21 = pivot.plan.g21 + d2;
-        tryAdd({ g11, g12: 60 - g11, g21, g22: 60 - g21 }, false);
-      }
-    }
+  // 3) Planes ancla PSR en los extremos (horizontal, vertical, equilibrado y asimétricos I1≠I2)
+  const anchors: readonly SignalPlan[] = [
+    { g11: 20, g12: 40, g21: 20, g22: 40 },
+    { g11: 44, g12: 16, g21: 44, g22: 16 },
+    { g11: 20, g12: 40, g21: 44, g22: 16 },
+    { g11: 44, g12: 16, g21: 20, g22: 40 },
+    { g11: 30, g12: 30, g21: 30, g22: 30 },
+  ];
+  for (const anchor of anchors) {
+    tryAdd(anchor, false);
   }
 
   const currentEntry = seen.get(planKey(currentPlan));
@@ -119,14 +143,14 @@ function generateOrderedCandidates(
     .filter((c) => !c.isCurrentPlan)
     .sort((a, b) => b.heuristicScore - a.heuristicScore);
 
-  // Incluir los mejores candidatos heurísticos + 1 candidato contrastante para evidenciar poda clara
+  // Incluir: plan vigente + mejores candidatos heurísticos + 1 candidato contrastante para evidenciar poda
   const selected: RawCandidate[] = [];
   if (currentEntry) {
     selected.push(currentEntry);
   }
   const topSlice = others.slice(0, Math.max(1, maxCandidates - 2));
   selected.push(...topSlice);
-  const contrasting = others[Math.min(others.length - 1, topSlice.length + 2)];
+  const contrasting = others[others.length - 1];
   if (contrasting && !selected.some((c) => planKey(c.plan) === planKey(contrasting.plan))) {
     selected.push(contrasting);
   }
@@ -204,7 +228,14 @@ export function decidePlanAlphaBeta(
 ): AlphaBetaDecisionResult {
   const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
-  const rawCandidates = generateOrderedCandidates(currentPlan, queues, links, effectiveRates, 6);
+  const rawCandidates = generateOrderedCandidates(
+    currentPlan,
+    queues,
+    links,
+    effectiveRates,
+    config.horizon,
+    6
+  );
   const samples = generateOrderedPoissonSamples(
     effectiveRates,
     config.horizon,
@@ -214,7 +245,9 @@ export function decidePlanAlphaBeta(
 
   const candidates: TraceCandidate[] = rawCandidates.map((c, idx) => ({
     id: `cand-${idx}`,
-    label: c.isCurrentPlan ? `Vigente ${formatPlanShort(c.plan)}` : `Plan ${String.fromCharCode(65 + idx)} ${formatPlanShort(c.plan)}`,
+    label: c.isCurrentPlan
+      ? `Plan Vigente ${formatPlanShort(c.plan)}`
+      : `Plan ${String.fromCharCode(65 + idx)} ${formatPlanShort(c.plan)}`,
     plan: { ...c.plan },
     isCurrentPlan: c.isCurrentPlan,
     heuristicScore: c.heuristicScore,
@@ -224,9 +257,14 @@ export function decidePlanAlphaBeta(
     selectedAsBest: false,
     samples: samples.map((s, sIdx) => ({
       sampleIndex: sIdx,
-      label: s.label,
+      label: `Esc. ${sIdx + 1}`,
       totalDemand: s.totalDemand,
+      avgVehiclesPerCycle: Number((s.totalDemand / Math.max(1, config.horizon)).toFixed(1)),
       horizonArrivals: s.horizonArrivals,
+      accumulatedWait: null,
+      avgWaitPerVehicle: null,
+      maxQueue: null,
+      saturatedCycles: null,
       cost: null,
       waitComponent: null,
       queueComponent: null,
@@ -277,7 +315,7 @@ export function decidePlanAlphaBeta(
     null,
     null,
     -Infinity,
-    `Ciclo ${cycle}: Inicia búsqueda MIN-MAX con ${candidates.length} planes válidos PSR y ${samples.length} muestras Poisson ordenadas de mayor a menor demanda. β = +∞.`,
+    `Ciclo ${cycle}: El agente va a comparar ${candidates.length} planes de semáforo seguros frente a ${samples.length} escenarios posibles de tráfico (ordenados del más cargado al más ligero). Todavía no hay ningún plan evaluado, así que el puntaje de referencia Beta empieza sin límite.`,
     [1, 2, 3, 4]
   );
 
@@ -292,7 +330,7 @@ export function decidePlanAlphaBeta(
       cIdx,
       null,
       alpha,
-      `Evaluando nodo MAX "${candidate.label}" (heúrística ${candidate.heuristicScore.toFixed(1)}). Se inicia α = -∞ frente a cota actual β = ${Number.isFinite(beta) ? beta.toFixed(2) : '+∞'}.`,
+      `Probamos "${candidate.label}" (Av. 20 de Octubre/P. Salazar ${candidate.plan.g11}s/${candidate.plan.g12}s y Av. 6 de Agosto/P. Salazar ${candidate.plan.g21}s/${candidate.plan.g22}s). Buscaremos cuál es su peor puntaje de congestión (Alfa) para compararlo contra el mejor plan guardado hasta ahora (Beta = ${Number.isFinite(beta) ? `${beta.toFixed(1)} pts` : 'sin definir'}).`,
       [5, 6]
     );
 
@@ -311,6 +349,12 @@ export function decidePlanAlphaBeta(
       );
 
       evaluatedLeaves += 1;
+      sampleSlot.accumulatedWait = evaluation.accumulatedWait;
+      sampleSlot.avgWaitPerVehicle = Number(
+        (evaluation.accumulatedWait / Math.max(1, sampleSlot.totalDemand)).toFixed(1)
+      );
+      sampleSlot.maxQueue = evaluation.maxQueue;
+      sampleSlot.saturatedCycles = evaluation.saturatedCycles;
       sampleSlot.cost = evaluation.cost;
       sampleSlot.waitComponent = evaluation.waitComponent;
       sampleSlot.queueComponent = evaluation.queueComponent;
@@ -324,7 +368,7 @@ export function decidePlanAlphaBeta(
         cIdx,
         sIdx,
         alpha,
-        `Muestra ${sampleSlot.label} (${sampleSlot.totalDemand} veh en H=${config.horizon}) para ${candidate.label}: costo C = ${evaluation.cost.toFixed(2)} (Espera ${evaluation.waitComponent.toFixed(1)}, Cola ${evaluation.queueComponent.toFixed(1)}, Sat ${evaluation.satComponent.toFixed(1)}).`,
+        `En ${sampleSlot.label} llegan ${sampleSlot.totalDemand} vehículos en ${config.horizon} ciclos (${sampleSlot.avgVehiclesPerCycle} vehículos por ciclo). Con este plan se acumulan ${Math.round(evaluation.accumulatedWait)} s de espera, una fila máxima de ${evaluation.maxQueue.toFixed(1)} vehículos y ${evaluation.saturatedCycles} de ${config.horizon} ciclos saturados → Puntaje total: ${evaluation.cost.toFixed(1)} pts.`,
         [7, 8]
       );
 
@@ -339,7 +383,7 @@ export function decidePlanAlphaBeta(
           cIdx,
           sIdx,
           alpha,
-          `El entorno adversario (MAX) actualiza α de ${candidate.label} a ${alpha.toFixed(2)} tras la muestra ${sampleSlot.label}.`,
+          `Nuevo peor caso encontrado para "${candidate.label}": su puntaje Alfa sube a ${alpha.toFixed(1)} pts debido a ${sampleSlot.label} (${sampleSlot.avgVehiclesPerCycle} vehículos por ciclo).`,
           [9]
         );
       }
@@ -365,8 +409,8 @@ export function decidePlanAlphaBeta(
           sIdx,
           alpha,
           remainingSamples.length > 0
-            ? `¡CORTE ALFA-BETA! En ${candidate.label}, α (${alpha.toFixed(2)}) ≥ β (${beta.toFixed(2)}). Es imposible mejorar al mejor plan vigente. Se podan ${remainingSamples.length} muestras restantes (${remainingSamples.join(', ')}).`
-            : `¡CORTE ALFA-BETA! En ${candidate.label}, α (${alpha.toFixed(2)}) ≥ β (${beta.toFixed(2)}) en la última muestra. El plan queda descartado.`,
+            ? `¡SE PODA ESTE PLAN! "${candidate.label}" ya alcanzó ${alpha.toFixed(1)} pts (Alfa), que es igual o peor que nuestro mejor plan guardado (${beta.toFixed(1)} pts en Beta). Ya no puede ganar, así que descartamos sin calcular los ${remainingSamples.length} escenarios restantes (${remainingSamples.join(', ')}).`
+            : `¡PLAN DESCARTADO! "${candidate.label}" alcanzó ${alpha.toFixed(1)} pts (Alfa), sin lograr mejorar el puntaje de referencia Beta (${beta.toFixed(1)} pts).`,
           [10, 11]
         );
         break;
@@ -382,7 +426,7 @@ export function decidePlanAlphaBeta(
         cIdx,
         null,
         alpha,
-        `El nodo raíz (MIN) mejora su cota superior: β baja a ${beta.toFixed(2)} con el nuevo mejor plan "${candidate.label}".`,
+        `¡NUEVO MEJOR PLAN! "${candidate.label}" resistió todos los escenarios con un peor puntaje de solo ${beta.toFixed(1)} pts. El agente actualiza su mejor referencia Beta a ${beta.toFixed(1)} pts.`,
         [12, 13, 14]
       );
     } else if (!wasPruned) {
@@ -392,7 +436,7 @@ export function decidePlanAlphaBeta(
         cIdx,
         null,
         alpha,
-        `Finalizó "${candidate.label}" con peor costo ${alpha.toFixed(2)} (no mejora β = ${beta.toFixed(2)}).`,
+        `Terminó la revisión de "${candidate.label}" con un peor puntaje de ${alpha.toFixed(1)} pts (no mejora al mejor plan actual de ${beta.toFixed(1)} pts).`,
         [12]
       );
     }
@@ -414,7 +458,7 @@ export function decidePlanAlphaBeta(
     bestIndex,
     null,
     bestCandidate.alphaValue,
-    `Decisión completada en ${latencyMs.toFixed(2)} ms: se selecciona "${bestCandidate.label}" con peor costo β = ${beta.toFixed(2)}. Evaluadas ${evaluatedLeaves}/${candidates.length * samples.length} hojas (${prunedLeaves} ramas podadas, 0 violaciones PSR).`,
+    `Decisión lista en ${latencyMs.toFixed(2)} ms: gana "${bestCandidate.label}" con el menor puntaje de congestión (${beta.toFixed(1)} pts). Solo se calcularon ${evaluatedLeaves} de ${candidates.length * samples.length} escenarios porque la poda ahorró ${prunedLeaves} cálculos innecesarios.`,
     [15]
   );
 
@@ -451,43 +495,62 @@ export function decidePlanAlphaBeta(
  * de poda Alfa-Beta para explicar paso a paso en la defensa.
  */
 export function buildClassExampleTrace(): AlphaBetaTrace {
+  interface ClassSampleSpec {
+    totalDemand: number;
+    accumulatedWait: number;
+    maxQueue: number;
+    saturatedCycles: number;
+  }
+
   interface ClassSpec {
     label: string;
     plan: SignalPlan;
     isCurrentPlan: boolean;
     heuristicScore: number;
-    sampleCosts: [number, number, number];
-    sampleDemands: [number, number, number];
+    samples: [ClassSampleSpec, ClassSampleSpec, ClassSampleSpec];
   }
 
+  const horizon = 4;
+
+  // Datos reales de tráfico (vehículos, tiempo de espera acumulado, fila máxima y ciclos saturados)
+  // El puntaje total se calcula exactamente con esos mismos datos (50% espera + 30% fila máxima + 20% saturación)
   const specs: ClassSpec[] = [
     {
       label: 'Plan A Vigente (30,30 | 30,30)',
       plan: { g11: 30, g12: 30, g21: 30, g22: 30 },
       isCurrentPlan: true,
       heuristicScore: 76.0,
-      sampleCosts: [58.0, 51.4, 44.2],
-      sampleDemands: [192, 168, 145],
+      samples: [
+        { totalDemand: 192, accumulatedWait: 9728, maxQueue: 21, saturatedCycles: 1 }, // 32.0 + 21.0 + 5.0 = 58.0
+        { totalDemand: 168, accumulatedWait: 8360, maxQueue: 19, saturatedCycles: 1 }, // 27.5 + 19.0 + 5.0 = 51.5
+        { totalDemand: 144, accumulatedWait: 7600, maxQueue: 16, saturatedCycles: 0 }, // 25.0 + 16.0 + 0.0 = 41.0
+      ],
     },
     {
       label: 'Plan B Desfavorable (24,36 | 24,36)',
       plan: { g11: 24, g12: 36, g21: 24, g22: 36 },
       isCurrentPlan: false,
       heuristicScore: 54.0,
-      sampleCosts: [65.0, 59.2, 52.0],
-      sampleDemands: [192, 168, 145],
+      samples: [
+        { totalDemand: 192, accumulatedWait: 10944, maxQueue: 24, saturatedCycles: 2 }, // 36.0 + 24.0 + 10.0 = 70.0 -> PODA
+        { totalDemand: 168, accumulatedWait: 9424, maxQueue: 21, saturatedCycles: 1 },
+        { totalDemand: 144, accumulatedWait: 8208, maxQueue: 18, saturatedCycles: 1 },
+      ],
     },
     {
       label: 'Plan C Óptimo (39,21 | 39,21)',
       plan: { g11: 39, g12: 21, g21: 39, g22: 21 },
       isCurrentPlan: false,
       heuristicScore: 95.5,
-      sampleCosts: [46.5, 41.2, 36.8],
-      sampleDemands: [192, 168, 145],
+      samples: [
+        { totalDemand: 192, accumulatedWait: 7904, maxQueue: 15, saturatedCycles: 1 }, // 26.0 + 15.0 + 5.0 = 46.0
+        { totalDemand: 168, accumulatedWait: 7296, maxQueue: 13, saturatedCycles: 0 }, // 24.0 + 13.0 + 0.0 = 37.0
+        { totalDemand: 144, accumulatedWait: 6384, maxQueue: 11, saturatedCycles: 0 }, // 21.0 + 11.0 + 0.0 = 32.0
+      ],
     },
   ];
 
-  const sampleLabels = ['M3 (Pico)', 'M2 (Media)', 'M1 (Baja)'];
+  const sampleLabels = ['Esc. 1 (Pico)', 'Esc. 2 (Media)', 'Esc. 3 (Suave)'];
 
   const candidates: TraceCandidate[] = specs.map((spec, idx) => ({
     id: `cand-${idx}`,
@@ -499,17 +562,25 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
     pruned: false,
     prunedCount: 0,
     selectedAsBest: false,
-    samples: sampleLabels.map((sLabel, sIdx) => ({
-      sampleIndex: sIdx,
-      label: sLabel,
-      totalDemand: spec.sampleDemands[sIdx],
-      horizonArrivals: [],
-      cost: null,
-      waitComponent: null,
-      queueComponent: null,
-      satComponent: null,
-      status: 'pending',
-    })),
+    samples: sampleLabels.map((sLabel, sIdx) => {
+      const sp = spec.samples[sIdx];
+      return {
+        sampleIndex: sIdx,
+        label: sLabel,
+        totalDemand: sp.totalDemand,
+        avgVehiclesPerCycle: Number((sp.totalDemand / horizon).toFixed(1)),
+        horizonArrivals: [],
+        accumulatedWait: null,
+        avgWaitPerVehicle: null,
+        maxQueue: null,
+        saturatedCycles: null,
+        cost: null,
+        waitComponent: null,
+        queueComponent: null,
+        satComponent: null,
+        status: 'pending',
+      };
+    }),
   }));
 
   const steps: TraceStep[] = [];
@@ -554,7 +625,7 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
     null,
     null,
     -Infinity,
-    'Ejemplo de Clase (3 planes × 3 muestras): La raíz MIN busca minimizar el peor costo W(p). Se inicializa β = +∞ y se evalúa primero el Plan A (Vigente) para fijar una cota fuerte.',
+    'Ejemplo de Clase (3 planes × 3 escenarios de tráfico): El agente compara cuántos segundos esperan los vehículos, qué tan larga se vuelve la fila y si se satura la cuadra central. Empezamos probando el Plan A (el que está activo hoy) para fijar la primera referencia Beta.',
     [1, 2, 3, 4]
   );
 
@@ -570,21 +641,30 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
       cIdx,
       null,
       alpha,
-      `Entrando al nodo MAX "${candidate.label}". α = -∞, cota global del agente β = ${Number.isFinite(beta) ? beta.toFixed(1) : '+∞'}.`,
+      `Probamos "${candidate.label}". Revisaremos primero el escenario más cargado (48 vehículos por ciclo) para hallar su peor puntaje (Alfa) y compararlo con la mejor referencia Beta = ${Number.isFinite(beta) ? `${beta.toFixed(1)} pts` : 'sin definir'}.`,
       [5, 6]
     );
 
     let wasPruned = false;
 
     for (let sIdx = 0; sIdx < 3; sIdx += 1) {
-      const cost = spec.sampleCosts[sIdx];
+      const sp = spec.samples[sIdx];
+      const waitComponent = Number((100 * 0.5 * (sp.accumulatedWait / (horizon * 3800))).toFixed(1));
+      const queueComponent = Number((100 * 0.3 * (sp.maxQueue / 30)).toFixed(1));
+      const satComponent = Number((100 * 0.2 * (sp.saturatedCycles / horizon)).toFixed(1));
+      const cost = Number((waitComponent + queueComponent + satComponent).toFixed(1));
+
       const slot = candidate.samples[sIdx];
       const leafId = `${candidate.id}-s${sIdx}`;
 
+      slot.accumulatedWait = sp.accumulatedWait;
+      slot.avgWaitPerVehicle = Number((sp.accumulatedWait / sp.totalDemand).toFixed(1));
+      slot.maxQueue = sp.maxQueue;
+      slot.saturatedCycles = sp.saturatedCycles;
       slot.cost = cost;
-      slot.waitComponent = Number((cost * 0.52).toFixed(1));
-      slot.queueComponent = Number((cost * 0.31).toFixed(1));
-      slot.satComponent = Number((cost * 0.17).toFixed(1));
+      slot.waitComponent = waitComponent;
+      slot.queueComponent = queueComponent;
+      slot.satComponent = satComponent;
       slot.status = 'evaluated';
       evaluatedLeaves += 1;
       evaluatedLeafIds.push(leafId);
@@ -595,7 +675,7 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
         cIdx,
         sIdx,
         alpha,
-        `Se evalúa ${slot.label} en ${candidate.label} → Costo = ${cost.toFixed(1)}.`,
+        `En ${slot.label} llegan ${sp.totalDemand} vehículos (${slot.avgVehiclesPerCycle} vehículos por ciclo): generan ${sp.accumulatedWait.toLocaleString('es-BO')} s de espera (${waitComponent} pts) + fila máxima de ${sp.maxQueue} vehículos (${queueComponent} pts) + ${sp.saturatedCycles} de 4 ciclos saturados (${satComponent} pts) = ${cost.toFixed(1)} pts.`,
         [7, 8]
       );
 
@@ -609,7 +689,7 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
           cIdx,
           sIdx,
           alpha,
-          `El nodo MAX actualiza su peor caso conocido: α = ${alpha.toFixed(1)}.`,
+          `El peor puntaje encontrado hasta ahora para "${candidate.label}" (Alfa) se actualiza a ${alpha.toFixed(1)} pts.`,
           [9]
         );
       }
@@ -632,7 +712,7 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
           cIdx,
           sIdx,
           alpha,
-          `${candidate.label} alcanzó costo ${alpha.toFixed(1)} en ${slot.label}. Como α (${alpha.toFixed(1)}) ≥ β (${beta.toFixed(1)}), es imposible que mejore al plan vigente. Se podan ${remLabels.join(' y ')}.`,
+          `¡SE PODA "${candidate.label}"! Solo en ${slot.label} ya produjo ${alpha.toFixed(1)} pts de congestión (Alfa), superando los ${beta.toFixed(1)} pts del mejor plan guardado (Beta). Como ya no puede ganar, descartamos sin calcular ${remLabels.join(' y ')}.`,
           [10, 11]
         );
         break;
@@ -648,7 +728,7 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
         cIdx,
         null,
         alpha,
-        `El nodo MIN encuentra un plan estrictamente mejor: β se actualiza a ${beta.toFixed(1)} (${candidate.label}).`,
+        `¡MEJOR PLAN ACTUALIZADO! "${candidate.label}" superó los 3 escenarios con un peor puntaje de ${beta.toFixed(1)} pts. Beta baja a ${beta.toFixed(1)} pts.`,
         [12, 13, 14]
       );
     }
@@ -662,7 +742,7 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
     bestIndex,
     null,
     candidates[bestIndex].alphaValue,
-    `Resultado final: se elige "${candidates[bestIndex].label}" con peor costo β = ${beta.toFixed(1)}. Se ahorraron ${prunedLeaves} evaluaciones mediante corte α ≥ β.`,
+    `Resultado final: el agente elige "${candidates[bestIndex].label}" porque garantiza el menor nivel de congestión (${beta.toFixed(1)} pts en el peor escenario). La poda evitó calcular ${prunedLeaves} escenarios innecesarios.`,
     [15]
   );
 
@@ -671,7 +751,7 @@ export function buildClassExampleTrace(): AlphaBetaTrace {
     cycle: 1,
     timestampMs: Date.now(),
     latencyMs: 0.42,
-    horizon: 4,
+    horizon,
     sampleCount: 3,
     initialPlan: { g11: 30, g12: 30, g21: 30, g22: 30 },
     bestPlan: { ...candidates[bestIndex].plan },

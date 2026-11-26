@@ -31,7 +31,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     id: 4,
-    shortLabel: '4. Inspector α-β',
+    shortLabel: '4. Inspector Alfa-Beta',
     fullLabel: 'Vista 4: Inspector Paso a Paso de Poda Alfa-Beta',
     icon: <GitBranch className="w-4 h-4 shrink-0" aria-hidden="true" />,
   },
@@ -66,7 +66,7 @@ export function Navbar({ activeView, onSelectView, cycle, isRunning }: NavbarPro
                 SMARTTRAFFIC LA PAZ
               </h1>
               <p className="text-xs text-[#9aa8d1] mt-0.5">
-                Corredor Pérez Velasco (I1) — Acceso Autopista / Av. Montes (I2)
+                Sopocachi · Plaza Avaroa / Av. 20 de Octubre (I1) — Av. 6 de Agosto (I2) · C. Pedro Salazar y C. Belisario Salinas
               </p>
             </div>
           </div>

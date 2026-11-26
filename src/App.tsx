@@ -132,7 +132,7 @@ export function App() {
       </main>
 
       <footer className="border-t-2 border-[#1f284d] bg-[#090a14]/90 py-3 px-4 text-center text-[11px] text-[#7c8cb8] font-mono-code">
-        SmartTraffic La Paz · Corredor Pérez Velasco (I1) – Acceso Autopista / Av. Montes (I2) · Motor IA en TypeScript puro (PSR + Poda Alfa-Beta)
+        SmartTraffic La Paz · Sopocachi: Plaza Avaroa / Av. 20 de Octubre (I1) — Av. 6 de Agosto (I2) por C. Pedro Salazar y C. Belisario Salinas · Motor IA (PSR + Poda Alfa-Beta)
       </footer>
     </div>
   );

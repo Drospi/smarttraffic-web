@@ -7,8 +7,8 @@ export const PSR_BOUNDS = {
   G2_MIN: 16,
   G2_MAX: 40,
   CYCLE_LENGTH: 70,
-  YELLOW_TIME: 3,
-  ALL_RED_TIME: 2,
+  YELLOW_TIME: 2,
+  ALL_RED_TIME: 3,
 } as const;
 
 export interface PSRValidationResult {
@@ -26,30 +26,42 @@ export function validatePSR(plan: SignalPlan): PSRValidationResult {
   const violations: string[] = [];
 
   if (!Number.isInteger(plan.g11) || !Number.isInteger(plan.g12)) {
-    violations.push('I1 debe tener tiempos de verde en segundos enteros.');
+    violations.push('Cruce Av. 20 de Octubre y Pedro Salazar (I1) debe tener segundos enteros.');
   }
   if (!Number.isInteger(plan.g21) || !Number.isInteger(plan.g22)) {
-    violations.push('I2 debe tener tiempos de verde en segundos enteros.');
+    violations.push('Cruce Av. 6 de Agosto y Pedro Salazar (I2) debe tener segundos enteros.');
   }
 
   if (plan.g11 < PSR_BOUNDS.G1_MIN || plan.g11 > PSR_BOUNDS.G1_MAX) {
-    violations.push(`g11=${plan.g11}s fuera de dominio [${PSR_BOUNDS.G1_MIN}, ${PSR_BOUNDS.G1_MAX}]s.`);
+    violations.push(
+      `C. Pedro Salazar en I1 (${plan.g11} s) debe estar entre ${PSR_BOUNDS.G1_MIN} y ${PSR_BOUNDS.G1_MAX} segundos.`
+    );
   }
   if (plan.g12 < PSR_BOUNDS.G2_MIN || plan.g12 > PSR_BOUNDS.G2_MAX) {
-    violations.push(`g12=${plan.g12}s fuera de dominio [${PSR_BOUNDS.G2_MIN}, ${PSR_BOUNDS.G2_MAX}]s.`);
+    violations.push(
+      `Av. 20 de Octubre en I1 (${plan.g12} s) debe estar entre ${PSR_BOUNDS.G2_MIN} y ${PSR_BOUNDS.G2_MAX} segundos.`
+    );
   }
   if (plan.g21 < PSR_BOUNDS.G1_MIN || plan.g21 > PSR_BOUNDS.G1_MAX) {
-    violations.push(`g21=${plan.g21}s fuera de dominio [${PSR_BOUNDS.G1_MIN}, ${PSR_BOUNDS.G1_MAX}]s.`);
+    violations.push(
+      `C. Pedro Salazar / Belisario Salinas en I2 (${plan.g21} s) debe estar entre ${PSR_BOUNDS.G1_MIN} y ${PSR_BOUNDS.G1_MAX} segundos.`
+    );
   }
   if (plan.g22 < PSR_BOUNDS.G2_MIN || plan.g22 > PSR_BOUNDS.G2_MAX) {
-    violations.push(`g22=${plan.g22}s fuera de dominio [${PSR_BOUNDS.G2_MIN}, ${PSR_BOUNDS.G2_MAX}]s.`);
+    violations.push(
+      `Av. 6 de Agosto en I2 (${plan.g22} s) debe estar entre ${PSR_BOUNDS.G2_MIN} y ${PSR_BOUNDS.G2_MAX} segundos.`
+    );
   }
 
   if (plan.g11 + plan.g12 !== PSR_BOUNDS.EFFECTIVE_GREEN_SUM) {
-    violations.push(`Restricción I1 violada: g11 + g12 = ${plan.g11 + plan.g12} ≠ ${PSR_BOUNDS.EFFECTIVE_GREEN_SUM}s.`);
+    violations.push(
+      `En Av. 20 de Octubre / Pedro Salazar los verdes suman ${plan.g11 + plan.g12} s, pero deben sumar exactamente ${PSR_BOUNDS.EFFECTIVE_GREEN_SUM} segundos.`
+    );
   }
   if (plan.g21 + plan.g22 !== PSR_BOUNDS.EFFECTIVE_GREEN_SUM) {
-    violations.push(`Restricción I2 violada: g21 + g22 = ${plan.g21 + plan.g22} ≠ ${PSR_BOUNDS.EFFECTIVE_GREEN_SUM}s.`);
+    violations.push(
+      `En Av. 6 de Agosto / Pedro Salazar los verdes suman ${plan.g21 + plan.g22} s, pero deben sumar exactamente ${PSR_BOUNDS.EFFECTIVE_GREEN_SUM} segundos.`
+    );
   }
 
   return {

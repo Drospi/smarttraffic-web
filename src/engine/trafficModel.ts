@@ -19,7 +19,8 @@ export const SCENARIOS: Record<ScenarioId, ScenarioDefinition> = {
     id: 'habitual',
     name: 'Demanda Habitual',
     shortName: 'Habitual',
-    description: 'Flujo moderado con predominancia del eje Pérez Velasco – Av. Montes (F1).',
+    description:
+      'Flujo moderado en Sopocachi por C. Pedro Salazar entre Plaza Avaroa / Av. 20 de Octubre (I1) y Av. 6 de Agosto (I2).',
     baseRates: {
       'I1-F1': 9.2,
       'I1-F2': 5.2,
@@ -29,9 +30,10 @@ export const SCENARIOS: Record<ScenarioId, ScenarioDefinition> = {
   },
   pico: {
     id: 'pico',
-    name: 'Hora Pico',
+    name: 'Hora Pico Sopocachi',
     shortName: 'Hora Pico',
-    description: 'Alta congestión sostenida en el corredor troncal I1–I2 con riesgo de saturación en R12/R21.',
+    description:
+      'Alta congestión en C. Pedro Salazar y conexión Belisario Salinas con riesgo de trancadera entre Av. 20 de Octubre y Av. 6 de Agosto.',
     baseRates: {
       'I1-F1': 15.5,
       'I1-F2': 7.0,
@@ -41,9 +43,10 @@ export const SCENARIOS: Record<ScenarioId, ScenarioDefinition> = {
   },
   rafaga: {
     id: 'rafaga',
-    name: 'Ráfaga Temporal',
+    name: 'Ráfaga Av. 20 Oct / 6 Ago',
     shortName: 'Ráfaga',
-    description: 'Demanda base con ráfaga transversal intensa en accesos F2 entre los ciclos 8 y 16.',
+    description:
+      'Demanda base con ráfaga intensa subiendo por Av. 20 de Octubre y bajando por Av. 6 de Agosto (ciclos 8 a 16).',
     baseRates: {
       'I1-F1': 11.0,
       'I1-F2': 6.0,
@@ -303,8 +306,8 @@ export function computeIntersectionPhase(
   elapsedInCycle: number,
   g1: number,
   g2: number,
-  yellowTime = 3,
-  allRedTime = 2
+  yellowTime = 2,
+  allRedTime = 3
 ): { phase: SignalPhase; remaining: number } {
   const cycle = g1 + yellowTime + allRedTime + g2 + yellowTime + allRedTime;
   const t = ((elapsedInCycle % cycle) + cycle) % cycle;

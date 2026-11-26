@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion';
 import {
+  ArrowLeftRight,
+  Calculator,
   Columns2,
   Flame,
   Image as ImageIcon,
@@ -10,6 +12,7 @@ import {
   SlidersHorizontal,
   Square,
   X,
+  Zap,
 } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type MutableRefObject } from 'react';
 import { renderCorridorCanvas } from '../canvas/corridorRenderer';
@@ -21,10 +24,10 @@ import type { ApproachId, ControllerMode, ScenarioId } from '../engine/types';
 const SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const;
 
 const APPROACH_LABELS: Record<ApproachId, string> = {
-  'I1-F1': 'I1-F1 (P. Velasco Troncal)',
-  'I1-F2': 'I1-F2 (P. Velasco Transv.)',
-  'I2-F1': 'I2-F1 (Av. Montes Troncal)',
-  'I2-F2': 'I2-F2 (Autopista Transv.)',
+  'I1-F1': 'I1-F1 · C. Pedro Salazar (Horizontal →)',
+  'I1-F2': 'I1-F2 · Av. 20 de Octubre / Plaza Avaroa (Vertical ↑)',
+  'I2-F1': 'I2-F1 · P. Salazar / Conex. Belisario (Horizontal ←)',
+  'I2-F2': 'I2-F2 · Av. 6 de Agosto (Vertical ↓)',
 };
 
 interface View3SimulatorProps {
@@ -200,14 +203,51 @@ export function View3Simulator({
     onSyncSnapshot();
   };
 
-  const handleInjectBurst = (): void => {
-    simulatorRef.current.injectBurst(9);
+  const handleInjectBurst = (target: 'all' | 'horizontal' | 'vertical' = 'all'): void => {
+    simulatorRef.current.injectBurst(target, 6);
+    onSyncSnapshot();
+  };
+
+  const handleInvertTraffic = (): void => {
+    const r = snapshot.config.arrivalRates;
+    const isCurrentlyHorizontalDominant = r['I1-F1'] + r['I2-F1'] >= r['I1-F2'] + r['I2-F2'];
+    if (isCurrentlyHorizontalDominant) {
+      // Invertir: pico fuerte en calles verticales (F2) y flujo bajo en avenida horizontal (F1)
+      simulatorRef.current.setAllArrivalRates({
+        'I1-F1': 3.0,
+        'I1-F2': 22.0,
+        'I2-F1': 3.0,
+        'I2-F2': 21.0,
+      });
+    } else {
+      // Volver a pico fuerte en avenida horizontal (F1) y flujo bajo en verticales (F2)
+      simulatorRef.current.setAllArrivalRates({
+        'I1-F1': 21.0,
+        'I1-F2': 3.5,
+        'I2-F1': 20.0,
+        'I2-F2': 3.5,
+      });
+    }
+    // Avanzar 1 ciclo pareado inmediatamente para ver el impacto real en tiempos de espera y respuesta récord
+    simulatorRef.current.stepCycle();
     onSyncSnapshot();
   };
 
   const openSpritesModal = (): void => {
     spritesDialogRef.current?.showModal();
   };
+
+  // Datos en vivo para la tarjeta de Fórmula del Simulador
+  const rates = snapshot.config.arrivalRates;
+  const satRate = snapshot.config.saturationRate;
+  const totalIncomingPerCycle =
+    rates['I1-F1'] + rates['I1-F2'] + rates['I2-F1'] + rates['I2-F2'];
+  const convCapI1F1 = (satRate * snapshot.conventional.plan.g11).toFixed(1);
+  const convCapI1F2 = (satRate * snapshot.conventional.plan.g12).toFixed(1);
+  const smartCapI1F1 = (satRate * snapshot.smart.plan.g11).toFixed(1);
+  const smartCapI1F2 = (satRate * snapshot.smart.plan.g12).toFixed(1);
+  const waitDiffSeconds =
+    snapshot.conventional.lastCycleAvgWaitPerVeh - snapshot.smart.lastCycleAvgWaitPerVeh;
 
   const canonicalSprites = spriteManager.getCanonicalStatus();
   const detectedFiles = spriteManager.getDetectedFilenames();
@@ -243,12 +283,22 @@ export function View3Simulator({
 
           <button
             type="button"
-            onClick={handleInjectBurst}
+            onClick={() => handleInjectBurst('all')}
             className="arcade-btn arcade-btn-pink"
-            title="Inyecta autos simultáneamente en ambos controladores"
+            title="Aumenta los vehículos por ciclo en todos los accesos e inyecta una ráfaga real"
           >
             <Flame className="w-4 h-4" />
-            INYECTAR RÁFAGA
+            AUMENTAR AUTOS (+RÁFAGA)
+          </button>
+
+          <button
+            type="button"
+            onClick={handleInvertTraffic}
+            className="arcade-btn arcade-btn-amber"
+            title="Invierte el tráfico entre avenida horizontal y calles verticales para ver la reacción inmediata del agente"
+          >
+            <ArrowLeftRight className="w-4 h-4" />
+            INVERTIR TRÁFICO
           </button>
         </div>
 
@@ -464,8 +514,8 @@ export function View3Simulator({
               <div>
                 <div className="font-pixel text-[10px] text-[#ffb800]">CONVENCIONAL FIJO</div>
                 <div className="text-[#c8d4f5] mt-1">
-                  Plan: I1 ({snapshot.conventional.plan.g11}s/{snapshot.conventional.plan.g12}s) | I2 (
-                  {snapshot.conventional.plan.g21}s/{snapshot.conventional.plan.g22}s)
+                  I1: {snapshot.conventional.plan.g11}s Horiz / {snapshot.conventional.plan.g12}s Vert · I2:{' '}
+                  {snapshot.conventional.plan.g21}s / {snapshot.conventional.plan.g22}s
                 </div>
               </div>
               <div className="text-right font-mono-code">
@@ -480,10 +530,12 @@ export function View3Simulator({
 
             <div className="pixel-panel-cyan p-3 flex items-center justify-between">
               <div>
-                <div className="font-pixel text-[10px] text-[#00f0ff]">SMARTTRAFFIC α-β</div>
+                <div className="font-pixel text-[10px] text-[#00f0ff]">
+                  SMARTTRAFFIC α-β · RÉCORD {snapshot.smart.lastDecisionLatencyMs.toFixed(2)} ms
+                </div>
                 <div className="text-[#c8d4f5] mt-1">
-                  Plan: I1 ({snapshot.smart.plan.g11}s/{snapshot.smart.plan.g12}s) | I2 (
-                  {snapshot.smart.plan.g21}s/{snapshot.smart.plan.g22}s)
+                  I1: {snapshot.smart.plan.g11}s Horiz / {snapshot.smart.plan.g12}s Vert · I2:{' '}
+                  {snapshot.smart.plan.g21}s / {snapshot.smart.plan.g22}s
                 </div>
               </div>
               <div className="text-right font-mono-code">
@@ -496,6 +548,91 @@ export function View3Simulator({
               </div>
             </div>
           </div>
+
+          {/* FÓRMULA EN VIVO DEL SIMULADOR (CON DATOS REALES Y RESPUESTA EN TIEMPO RÉCORD) */}
+          <div className="pixel-panel-green p-4 space-y-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#213d29] pb-2">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-[#39ff14]" />
+                <h3 className="font-pixel text-[10px] text-[#39ff14]">
+                  FÓRMULAS EN VIVO DEL SIMULADOR (CON DATOS ACTUALES)
+                </h3>
+              </div>
+              <span className="px-2 py-0.5 bg-[#00f0ff]/15 border border-[#00f0ff] text-[#00f0ff] font-mono-code font-bold flex items-center gap-1">
+                <Zap className="w-3 h-3" />
+                Decisión Agente: {snapshot.smart.lastDecisionLatencyMs.toFixed(2)} ms ·{' '}
+                {waitDiffSeconds >= 0
+                  ? `Ahorra ${waitDiffSeconds.toFixed(1)} s/veh de espera`
+                  : `Delta ${Math.abs(waitDiffSeconds).toFixed(1)} s/veh`}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Fórmula 1: Ecuación de transición por ciclo */}
+              <div className="bg-[#090a14] border-2 border-[#293668] p-3 space-y-2">
+                <div className="font-pixel text-[9px] text-[#00f0ff]">
+                  1. ECUACIÓN DE FILA Y DESCARGA (POR CICLO DE 70 s)
+                </div>
+                <div className="bg-[#111428] border border-[#00f0ff]/50 px-2.5 py-1.5 font-mono-code text-[11px] text-[#9bfaff]">
+                  q(t+1) = max(0, q(t) + veh/ciclo + 0.70·tramo − s·g)
+                </div>
+                <div className="space-y-1 text-[11px] text-[#cfd9f7] font-mono-code">
+                  <div>
+                    • Total entrando ahora:{' '}
+                    <strong className="text-white">{totalIncomingPerCycle.toFixed(1)} veh/ciclo</strong>{' '}
+                    (Horiz: {(rates['I1-F1'] + rates['I2-F1']).toFixed(1)} · Vert:{' '}
+                    {(rates['I1-F2'] + rates['I2-F2']).toFixed(1)})
+                  </div>
+                  <div>
+                    • Descarga I1 Convencional ({snapshot.conventional.plan.g11}s/{snapshot.conventional.plan.g12}s):{' '}
+                    <span className="text-[#ffb800]">
+                      Horiz {convCapI1F1} | Vert {convCapI1F2} veh/ciclo
+                    </span>
+                  </div>
+                  <div>
+                    • Descarga I1 SmartTraffic ({snapshot.smart.plan.g11}s/{snapshot.smart.plan.g12}s):{' '}
+                    <span className="text-[#39ff14] font-bold">
+                      Horiz {smartCapI1F1} | Vert {smartCapI1F2} veh/ciclo
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fórmula 2: Función de Costo / Utilidad en tiempo récord */}
+              <div className="bg-[#090a14] border-2 border-[#293668] p-3 space-y-2">
+                <div className="font-pixel text-[9px] text-[#ffb800]">
+                  2. FUNCIÓN DE COSTO ALFA-BETA (HORIZONTE H = 4)
+                </div>
+                <div className="bg-[#111428] border border-[#ffb800]/50 px-2.5 py-1.5 font-mono-code text-[11px] text-[#ffd466]">
+                  C = 100·[0.50·(Espera/(4·3800)) + 0.30·(ColaMáx/30) + 0.20·(Sat/4)]
+                </div>
+                <div className="space-y-1 text-[11px] text-[#cfd9f7] font-mono-code">
+                  <div>
+                    • Peor costo mínimo hallado (β):{' '}
+                    <strong className="text-[#39ff14]">{snapshot.smart.lastWorstCost.toFixed(1)} pts</strong>{' '}
+                    ({snapshot.smart.lastPrunedBranches} ramas podadas)
+                  </div>
+                  <div>
+                    • Espera último ciclo:{' '}
+                    <span className="text-[#ffb800]">
+                      Conv {snapshot.conventional.lastCycleAvgWaitPerVeh.toFixed(1)} s
+                    </span>{' '}
+                    vs.{' '}
+                    <span className="text-[#00f0ff] font-bold">
+                      Smart {snapshot.smart.lastCycleAvgWaitPerVeh.toFixed(1)} s
+                    </span>
+                  </div>
+                  <div>
+                    • Reacción del agente:{' '}
+                    <strong className="text-[#39ff14]">
+                      {snapshot.smart.lastDecisionLatencyMs.toFixed(2)} ms
+                    </strong>{' '}
+                    (0 violaciones PSR)
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Panel de Controles en Vivo */}
@@ -504,7 +641,7 @@ export function View3Simulator({
           <div className="pixel-panel p-4 space-y-3">
             <div className="flex items-center gap-2 border-b-2 border-[#263059] pb-2">
               <SlidersHorizontal className="w-4 h-4 text-[#00f0ff]" />
-              <h3 className="font-pixel text-[11px] text-[#00f0ff]">ESCENARIOS DE LA PAZ</h3>
+              <h3 className="font-pixel text-[11px] text-[#00f0ff]">ESCENARIOS SOPOCACHI (LA PAZ)</h3>
             </div>
 
             <div className="grid grid-cols-1 gap-2">
@@ -553,10 +690,10 @@ export function View3Simulator({
             <div className="space-y-3 text-xs">
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[#e6edf7] font-bold">I1 Pérez Velasco</span>
+                  <span className="text-[#e6edf7] font-bold">I1 · Av. 20 Oct / P. Salazar</span>
                   <div className="flex items-center gap-1.5 font-mono-code">
                     <label className="sr-only" htmlFor="conv-g11">
-                      Segundos verde I1 Fase 1
+                      Segundos verde I1 C. Pedro Salazar
                     </label>
                     <input
                       id="conv-g11"
@@ -586,10 +723,10 @@ export function View3Simulator({
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[#e6edf7] font-bold">I2 Av. Montes</span>
+                  <span className="text-[#e6edf7] font-bold">I2 · Av. 6 Ago / P. Salazar</span>
                   <div className="flex items-center gap-1.5 font-mono-code">
                     <label className="sr-only" htmlFor="conv-g21">
-                      Segundos verde I2 Fase 1
+                      Segundos verde I2 C. Pedro Salazar
                     </label>
                     <input
                       id="conv-g21"
@@ -619,15 +756,33 @@ export function View3Simulator({
             </div>
           </div>
 
-          {/* 3. Controles de Entrada (λ) y Salida (tasa de saturación) */}
+          {/* 3. Controles de Entrada (veh/ciclo) y Salida (tasa de saturación) */}
           <div className="pixel-panel p-4 space-y-3">
             <div className="flex items-center justify-between border-b-2 border-[#263059] pb-2">
               <h3 className="font-pixel text-[10px] text-[#39ff14]">
-                ENTRADAS (λ) Y DESCARGA EN VIVO
+                VEHÍCULOS POR CICLO Y DESCARGA EN VIVO
               </h3>
               <span className="text-[10px] text-[#8f9ec9]">
-                {snapshot.activeScenarioSchedule ? 'Auto escenario' : 'Manual'}
+                {snapshot.activeScenarioSchedule ? 'Auto escenario' : 'Manual activo'}
               </span>
+            </div>
+
+            {/* Botones rápidos para aumentar autos en eje horizontal o vertical */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleInjectBurst('horizontal')}
+                className="px-2 py-1.5 text-[10px] font-mono-code font-bold border-2 border-[#00f0ff] bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 cursor-pointer"
+              >
+                + AUTOS HORIZ. (F1)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInjectBurst('vertical')}
+                className="px-2 py-1.5 text-[10px] font-mono-code font-bold border-2 border-[#ffb800] bg-[#ffb800]/10 text-[#ffb800] hover:bg-[#ffb800]/20 cursor-pointer"
+              >
+                + AUTOS VERT. (F2)
+              </button>
             </div>
 
             <div className="space-y-2.5 text-xs">
@@ -642,11 +797,13 @@ export function View3Simulator({
                   <input
                     type="range"
                     min={1}
-                    max={24}
+                    max={26}
                     step={0.5}
                     value={snapshot.config.arrivalRates[approach]}
                     onChange={(e) => handleArrivalRateChange(approach, Number(e.target.value))}
-                    className="w-full retro-range"
+                    className={`w-full retro-range ${
+                      approach.endsWith('F2') ? 'amber' : ''
+                    }`}
                   />
                 </label>
               ))}

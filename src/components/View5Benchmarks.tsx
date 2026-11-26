@@ -16,6 +16,7 @@ import {
 import { runFullBenchmark } from '../engine/benchmark';
 import type { SimulatorSnapshot } from '../engine/simulator';
 import type { BenchmarkReport } from '../engine/types';
+import { ManualAlphaBetaExercise } from './ManualAlphaBetaExercise';
 
 interface View5BenchmarksProps {
   snapshot: SimulatorSnapshot;
@@ -92,9 +93,9 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
             GRÁFICAS EN TIEMPO REAL Y BENCHMARKS (CONVENCIONAL VS. SMARTTRAFFIC)
           </h2>
           <p className="text-xs sm:text-sm text-[#a6b4db] mt-1">
-            Comparación exclusiva bajo llegadas idénticas: Semáforo Convencional Fijo (I1:{' '}
-            {snapshot.config.conventionalPlan.g11}s/{snapshot.config.conventionalPlan.g12}s, I2:{' '}
-            {snapshot.config.conventionalPlan.g21}s/{snapshot.config.conventionalPlan.g22}s) vs. Agente SmartTraffic (Poda Alfa-Beta).
+            Ambos sistemas reciben exactamente los mismos vehículos por ciclo en Sopocachi: Semáforo Convencional Fijo (Av. 20 de Octubre / P. Salazar{' '}
+            {snapshot.config.conventionalPlan.g11}s/{snapshot.config.conventionalPlan.g12}s, Av. 6 de Agosto / P. Salazar{' '}
+            {snapshot.config.conventionalPlan.g21}s/{snapshot.config.conventionalPlan.g22}s) frente al Agente SmartTraffic (Poda Alfa-Beta).
           </p>
         </div>
 
@@ -119,6 +120,34 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
         </div>
       </div>
 
+      {/* Explicación clara de las 4 variables medidas */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 text-xs">
+        <div className="bg-[#111428] border-2 border-[#00f0ff]/60 p-3">
+          <div className="font-pixel text-[9px] text-[#00f0ff] mb-1">VEHÍCULOS EN FILA</div>
+          <p className="text-[#cfd9f7]">
+            Promedio de autos que quedan esperando al final de cada ciclo de 70 segundos. <strong>Menor es mejor.</strong>
+          </p>
+        </div>
+        <div className="bg-[#111428] border-2 border-[#ffb800]/60 p-3">
+          <div className="font-pixel text-[9px] text-[#ffb800] mb-1">TIEMPO DE ESPERA</div>
+          <p className="text-[#cfd9f7]">
+            Segundos promedio que tarda cada vehículo detenido en los semáforos del corredor. <strong>Menor es mejor.</strong>
+          </p>
+        </div>
+        <div className="bg-[#111428] border-2 border-[#39ff14]/60 p-3">
+          <div className="font-pixel text-[9px] text-[#39ff14] mb-1">VEHÍCULOS ATENDIDOS</div>
+          <p className="text-[#cfd9f7]">
+            Cantidad acumulada de vehículos que lograron cruzar exitosamente ambos semáforos. <strong>Mayor es mejor.</strong>
+          </p>
+        </div>
+        <div className="bg-[#111428] border-2 border-[#ff0055]/60 p-3">
+          <div className="font-pixel text-[9px] text-[#ff0055] mb-1">ESCENARIOS PODADOS</div>
+          <p className="text-[#cfd9f7]">
+            Cuántos escenarios de tráfico descartó la poda Alfa-Beta sin calcularlos en cada decisión de ciclo.
+          </p>
+        </div>
+      </div>
+
       {/* SECCIÓN A: 4 GRÁFICAS EN TIEMPO REAL DEL SIMULADOR */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -136,8 +165,11 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
           {/* 1. Longitud Promedio de Cola por Ciclo */}
           <div className="pixel-panel p-4 space-y-2">
             <h4 className="font-pixel text-[10px] text-white">
-              1. LONGITUD PROMEDIO DE COLA POR CICLO (VEH)
+              1. PROMEDIO DE VEHÍCULOS EN FILA POR CICLO
             </h4>
+            <p className="text-[11px] text-[#9aa8d1]">
+              Cuántos autos quedan esperando en promedio en cada acceso al terminar cada ciclo de 70 s.
+            </p>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={liveData} margin={{ top: 8, right: 16, left: -12, bottom: 4 }}>
@@ -158,7 +190,7 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
                   <Line
                     type="monotone"
                     dataKey="smartAvgQueue"
-                    name="SmartTraffic α-β"
+                    name="SmartTraffic Alfa-Beta"
                     stroke="#00f0ff"
                     strokeWidth={2.5}
                     dot={false}
@@ -172,8 +204,11 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
           {/* 2. Espera Promedio por Vehículo (s) */}
           <div className="pixel-panel p-4 space-y-2">
             <h4 className="font-pixel text-[10px] text-white">
-              2. ESPERA PROMEDIO POR VEHÍCULO (SEGUNDOS)
+              2. TIEMPO DE ESPERA PROMEDIO POR VEHÍCULO (SEGUNDOS)
             </h4>
+            <p className="text-[11px] text-[#9aa8d1]">
+              Segundos promedio que espera cada conductor antes de lograr cruzar la intersección.
+            </p>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={liveData} margin={{ top: 8, right: 16, left: -12, bottom: 4 }}>
@@ -194,7 +229,7 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
                   <Line
                     type="monotone"
                     dataKey="smartAvgWait"
-                    name="SmartTraffic α-β (s)"
+                    name="SmartTraffic Alfa-Beta (s)"
                     stroke="#00f0ff"
                     strokeWidth={2.5}
                     dot={false}
@@ -208,8 +243,11 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
           {/* 3. Flujo de Salida Acumulado (Autos atendidos) */}
           <div className="pixel-panel p-4 space-y-2">
             <h4 className="font-pixel text-[10px] text-white">
-              3. FLUJO DE SALIDA ACUMULADO (AUTOS ATENDIDOS)
+              3. VEHÍCULOS ATENDIDOS ACUMULADOS (SALIDAS)
             </h4>
+            <p className="text-[11px] text-[#9aa8d1]">
+              Total de autos que ya cruzaron el corredor desde el inicio de la simulación.
+            </p>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={liveData} margin={{ top: 8, right: 16, left: -6, bottom: 4 }}>
@@ -221,7 +259,7 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
                   <Line
                     type="monotone"
                     dataKey="conventionalCumulativeServed"
-                    name="Convencional (veh)"
+                    name="Convencional (vehículos)"
                     stroke="#ffb800"
                     strokeWidth={2.5}
                     dot={false}
@@ -230,7 +268,7 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
                   <Line
                     type="monotone"
                     dataKey="smartCumulativeServed"
-                    name="SmartTraffic α-β (veh)"
+                    name="SmartTraffic Alfa-Beta (vehículos)"
                     stroke="#39ff14"
                     strokeWidth={2.5}
                     dot={false}
@@ -241,11 +279,14 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
             </div>
           </div>
 
-          {/* 4. Nodos Evaluados vs. Ramas Podadas por Ciclo */}
+          {/* 4. Escenarios Evaluados vs. Descartados (Podados) por Ciclo */}
           <div className="pixel-panel p-4 space-y-2">
             <h4 className="font-pixel text-[10px] text-white">
-              4. NODOS EVALUADOS VS. RAMAS PODADAS POR CICLO
+              4. ESCENARIOS EVALUADOS VS. PODADOS POR CICLO
             </h4>
+            <p className="text-[11px] text-[#9aa8d1]">
+              Eficiencia de la poda Alfa-Beta: cuántos cálculos evitó el agente en cada ciclo sin perder exactitud.
+            </p>
             <div className="h-[250px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={liveData} margin={{ top: 8, right: 16, left: -12, bottom: 4 }}>
@@ -256,13 +297,13 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
                   <Legend wrapperStyle={{ fontSize: '11px' }} />
                   <Bar
                     dataKey="evaluatedNodes"
-                    name="Nodos Evaluados"
+                    name="Escenarios Evaluados"
                     fill="#00f0ff"
                     isAnimationActive={false}
                   />
                   <Bar
                     dataKey="prunedBranches"
-                    name="Ramas Podadas (α ≥ β)"
+                    name="Escenarios Podados (ahorrados)"
                     fill="#ff0055"
                     isAnimationActive={false}
                   />
@@ -478,6 +519,9 @@ export function View5Benchmarks({ snapshot, onStepFiveCycles }: View5BenchmarksP
           </div>
         </div>
       )}
+
+      {/* Ejemplo interactivo al final de la presentación para resolver el árbol Alfa-Beta a mano */}
+      <ManualAlphaBetaExercise />
     </motion.section>
   );
 }

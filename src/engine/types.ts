@@ -88,7 +88,12 @@ export interface TraceSampleEval {
   sampleIndex: number;
   label: string;
   totalDemand: number;
+  avgVehiclesPerCycle: number;
   horizonArrivals: CycleArrivalSample[];
+  accumulatedWait: number | null;
+  avgWaitPerVehicle: number | null;
+  maxQueue: number | null;
+  saturatedCycles: number | null;
   cost: number | null;
   waitComponent: number | null;
   queueComponent: number | null;
