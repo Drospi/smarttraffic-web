@@ -40,7 +40,7 @@ function getShortPlanTitle(cand: TraceCandidate): string {
 }
 
 export function View4Inspector({ realTrace }: View4InspectorProps) {
-  const [traceMode, setTraceMode] = useState<'real' | 'class_horiz' | 'class_vert'>('class_horiz');
+  const [traceMode, setTraceMode] = useState<'real' | 'class_horiz' | 'class_vert'>('real');
   const classHorizTrace = useMemo(() => buildClassExampleTrace('horizontal_peak'), []);
   const classVertTrace = useMemo(() => buildClassExampleTrace('vertical_peak'), []);
   const trace =
@@ -205,6 +205,16 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            onClick={() => setTraceMode('real')}
+            className={`arcade-btn ${
+              traceMode === 'real' ? 'arcade-btn-cyan-solid' : 'arcade-btn-cyan'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            DECISIÓN REAL (CICLO {realTrace.cycle})
+          </button>
+          <button
+            type="button"
             onClick={() => setTraceMode('class_horiz')}
             className={`arcade-btn ${
               traceMode === 'class_horiz' ? 'arcade-btn-amber' : 'arcade-btn-amber opacity-70'
@@ -222,16 +232,6 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
           >
             <ArrowLeftRight className="w-3.5 h-3.5" />
             EJEMPLO INVERSO (21s/39s)
-          </button>
-          <button
-            type="button"
-            onClick={() => setTraceMode('real')}
-            className={`arcade-btn ${
-              traceMode === 'real' ? 'arcade-btn-cyan-solid' : 'arcade-btn-cyan'
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5" />
-            DECISIÓN REAL (CICLO {realTrace.cycle})
           </button>
         </div>
       </div>
@@ -517,35 +517,50 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
             )}
           </div>
 
-          {/* Bloque 2: Cómo se obtiene el puntaje (en texto claro, sin símbolos extraños) */}
+          {/* Bloque 2: Cómo se obtiene el puntaje (fórmula y sustitución por parámetro) */}
           <div className="lg:col-span-4 bg-[#090a14] border-2 border-[#ffb800]/80 p-3.5 space-y-2.5 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="font-pixel text-[9px] text-[#ffb800]">
-                2. CÁLCULO DEL PUNTAJE EN PALABRAS
+                2. CÁLCULO DEL PUNTAJE POR PARÁMETRO
               </div>
               <div className="bg-[#111428] border border-[#2c3866] p-2 text-[11px] text-[#d6e0fa] leading-relaxed">
-                <strong>Puntaje de congestión</strong> = Parte por <strong>Tiempo de espera</strong> (peso 50%) + Parte por <strong>Fila más larga</strong> (peso 30%) + Parte por <strong>Saturación de cuadras</strong> (peso 20%).
+                <strong>Puntaje C(p, m)</strong> = <strong>Espera (50%)</strong> + <strong>Fila más larga (30%)</strong> + <strong>Saturación (20%)</strong>.
               </div>
 
               {activeSample && activeSample.cost !== null ? (
-                <div className="space-y-1.5 text-[12px]">
-                  <div className="flex justify-between">
-                    <span className="text-[#00f0ff]">• Tiempo de espera (50%):</span>
-                    <span className="font-bold text-white">
-                      +{(activeSample.waitComponent ?? 0).toFixed(1)} pts
-                    </span>
+                <div className="space-y-2 text-[12px]">
+                  <div className="bg-[#111428] border-l-2 border-[#00f0ff] px-2 py-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-[#00f0ff] font-bold">• Espera (50%):</span>
+                      <span className="font-bold text-white">
+                        +{(activeSample.waitComponent ?? 0).toFixed(1)} pts
+                      </span>
+                    </div>
+                    <div className="font-mono-code text-[10px] text-[#9aa8d1] mt-0.5">
+                      50 × ({Math.round(activeSample.accumulatedWait ?? 0).toLocaleString('es-BO')} ÷ {(trace.horizon * 3800).toLocaleString('es-BO')})
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#ffb800]">• Fila más larga (30%):</span>
-                    <span className="font-bold text-white">
-                      +{(activeSample.queueComponent ?? 0).toFixed(1)} pts
-                    </span>
+                  <div className="bg-[#111428] border-l-2 border-[#ffb800] px-2 py-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-[#ffb800] font-bold">• Fila más larga (30%):</span>
+                      <span className="font-bold text-white">
+                        +{(activeSample.queueComponent ?? 0).toFixed(1)} pts
+                      </span>
+                    </div>
+                    <div className="font-mono-code text-[10px] text-[#9aa8d1] mt-0.5">
+                      30 × ({(activeSample.maxQueue ?? 0).toFixed(1)} ÷ 30) = {(activeSample.maxQueue ?? 0).toFixed(1)} pts
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#ff6b9a]">• Saturación de cuadra (20%):</span>
-                    <span className="font-bold text-white">
-                      +{(activeSample.satComponent ?? 0).toFixed(1)} pts
-                    </span>
+                  <div className="bg-[#111428] border-l-2 border-[#ff0055] px-2 py-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-[#ff6b9a] font-bold">• Saturación (20%):</span>
+                      <span className="font-bold text-white">
+                        +{(activeSample.satComponent ?? 0).toFixed(1)} pts
+                      </span>
+                    </div>
+                    <div className="font-mono-code text-[10px] text-[#9aa8d1] mt-0.5">
+                      20 × ({activeSample.saturatedCycles ?? 0} ÷ {trace.horizon})
+                    </div>
                   </div>
                   <div className="border-t-2 border-[#39ff14] pt-2 mt-1 flex justify-between items-center">
                     <span className="font-bold text-[#39ff14]">SUMA TOTAL DEL ESCENARIO:</span>
@@ -556,7 +571,7 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
                 </div>
               ) : (
                 <p className="text-[11px] text-[#8f9ec9]">
-                  Cuando el paso evalúe un escenario de tráfico, aquí verás exactamente cuántos puntos aporta cada variable.
+                  Cuando el paso evalúe un escenario de tráfico, aquí verás la sustitución exacta y cuántos puntos aporta cada variable.
                 </p>
               )}
             </div>
@@ -616,6 +631,74 @@ export function View4Inspector({ realTrace }: View4InspectorProps) {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Desglose completo de la fórmula de puntos por parámetro/variable */}
+        <div className="bg-[#090a14] border-2 border-[#00f0ff]/60 p-3.5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1f2c52] pb-2">
+            <div className="font-pixel text-[9px] sm:text-[10px] text-[#00f0ff]">
+              ¿CÓMO CALCULA LOS PUNTOS CADA PARÁMETRO O VARIABLE? (HORIZONTE H = {trace.horizon} CICLOS)
+            </div>
+            <span className="font-mono-code text-[10px] px-2 py-0.5 bg-[#111428] border border-[#39ff14]/60 text-[#39ff14]">
+              Escala base 100 pts · Menor = menos congestión
+            </span>
+          </div>
+
+          <div className="bg-[#111428] border border-[#2c3b6e] px-3 py-2 font-mono-code text-[11px] text-[#eef4ff] overflow-x-auto">
+            C(p, m) = 100 × [ <span className="text-[#00f0ff]">0.50 × (Espera_acum ÷ (H × 3800))</span> +{' '}
+            <span className="text-[#ffb800]">0.30 × (Cola_max ÷ 30)</span> +{' '}
+            <span className="text-[#ff6b9a]">0.20 × (Ciclos_sat ÷ H)</span> ]
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-[11px]">
+              <thead>
+                <tr className="bg-[#111428] border-b-2 border-[#2a3663] text-[#9aa8d1] font-pixel text-[8px] sm:text-[9px]">
+                  <th className="py-2 px-2.5">VARIABLE / PARÁMETRO</th>
+                  <th className="py-2 px-2.5 text-center">PESO</th>
+                  <th className="py-2 px-2.5">FÓRMULA EXACTA</th>
+                  <th className="py-2 px-2.5">REFERENCIA</th>
+                  <th className="py-2 px-2.5">EQUIVALENCIA PRÁCTICA (H = {trace.horizon})</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1b2447] text-[#d6e0fa]">
+                <tr className="bg-[#0d1124]">
+                  <td className="py-2 px-2.5 font-bold text-[#00f0ff]">1. Espera acumulada</td>
+                  <td className="py-2 px-2.5 text-center font-pixel text-[9px] text-[#00f0ff]">50%</td>
+                  <td className="py-2 px-2.5 font-mono-code text-white">50 × (Espera_acum ÷ (H × 3800))</td>
+                  <td className="py-2 px-2.5 font-mono-code">
+                    {(trace.horizon * 3800).toLocaleString('es-BO')} veh·s
+                  </td>
+                  <td className="py-2 px-2.5">
+                    Cada <strong className="text-[#00f0ff]">{Math.round((trace.horizon * 3800) / 50)} veh·s</strong> suma{' '}
+                    <strong className="text-white">+1 pt</strong>
+                  </td>
+                </tr>
+                <tr className="bg-[#090a14]">
+                  <td className="py-2 px-2.5 font-bold text-[#ffb800]">2. Fila más larga</td>
+                  <td className="py-2 px-2.5 text-center font-pixel text-[9px] text-[#ffb800]">30%</td>
+                  <td className="py-2 px-2.5 font-mono-code text-white">30 × (Cola_max ÷ 30) = Cola_max</td>
+                  <td className="py-2 px-2.5 font-mono-code">30 vehículos</td>
+                  <td className="py-2 px-2.5">
+                    <strong className="text-[#ffb800]">+1 pt</strong> por cada vehículo en la cola más larga
+                  </td>
+                </tr>
+                <tr className="bg-[#0d1124]">
+                  <td className="py-2 px-2.5 font-bold text-[#ff6b9a]">3. Ciclos saturados</td>
+                  <td className="py-2 px-2.5 text-center font-pixel text-[9px] text-[#ff6b9a]">20%</td>
+                  <td className="py-2 px-2.5 font-mono-code text-white">20 × (Ciclos_sat ÷ H)</td>
+                  <td className="py-2 px-2.5 font-mono-code">{trace.horizon} ciclos (tramo &gt; 78% o cola ≥ 24)</td>
+                  <td className="py-2 px-2.5">
+                    <strong className="text-[#ff6b9a]">+{(20 / Math.max(1, trace.horizon)).toFixed(0)} pts</strong> por cada ciclo saturado (hasta 20 pts)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-[11px] text-[#9aa8d1] leading-relaxed">
+            <strong className="text-[#ffb800]">Nota:</strong> los términos de espera y fila máxima no tienen tope superior; si un plan colapsa con más de 30 vehículos en fila o más de {(trace.horizon * 3800).toLocaleString('es-BO')} veh·s, supera los 100 pts y dispara la poda Alfa-Beta aún más rápido.
+          </p>
         </div>
       </div>
 
