@@ -585,11 +585,10 @@ export function View1REAS({ onNextView }: View1REASProps) {
                   key={prop.id}
                   type="button"
                   onClick={() => setSelectedPropertyId(prop.id)}
-                  className={`text-left p-3 border-2 transition-all cursor-pointer ${
-                    active
+                  className={`text-left p-3 border-2 transition-all cursor-pointer ${active
                       ? 'bg-[#171d3d] shadow-[4px_4px_0_#04050a]'
                       : 'bg-[#0c0f20] border-[#263059] hover:border-[#4c5ea3]'
-                  }`}
+                    }`}
                   style={active ? { borderColor: prop.accent } : undefined}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -663,7 +662,7 @@ export function View1REAS({ onNextView }: View1REASProps) {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#233a2a] pb-3">
           <div>
             <h3 className="font-pixel text-xs sm:text-sm text-[#39ff14]">
-              3. ARQUITECTURA DEL AGENTE BASADO EN UTILIDAD (FLUJO INTERACTIVO + EJEMPLOS)
+              3. ARQUITECTURA DEL AGENTE BASADO EN UTILIDAD
             </h3>
             <p className="text-xs text-[#a5b3db] mt-1">
               Elige un caso práctico real de La Paz y recorre los 6 pasos para ver en lenguaje sencillo qué datos entran, qué evalúa y qué decide el agente.
@@ -700,11 +699,10 @@ export function View1REAS({ onNextView }: View1REASProps) {
                 key={caseId}
                 type="button"
                 onClick={() => setActiveCase(caseId)}
-                className={`p-3 border-2 text-left transition-all cursor-pointer ${
-                  isSelected
+                className={`p-3 border-2 text-left transition-all cursor-pointer ${isSelected
                     ? 'bg-[#161e3d] shadow-[4px_4px_0_#04050a]'
                     : 'bg-[#090a14] border-[#242e57] hover:border-[#4b5ca1]'
-                }`}
+                  }`}
                 style={isSelected ? { borderColor: meta.accent } : undefined}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
@@ -737,19 +735,18 @@ export function View1REAS({ onNextView }: View1REASProps) {
                 key={step.id}
                 type="button"
                 onClick={() => setActiveFlowStep(idx)}
-                className={`p-3 border-2 text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
-                  isActive
+                className={`p-3 border-2 text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${isActive
                     ? 'bg-[#182140] -translate-y-0.5'
                     : isCompleted
-                    ? 'bg-[#0f162c] border-[#2f4b3c]'
-                    : 'bg-[#0b0e1d] border-[#263059] hover:border-[#4b5ca1]'
-                }`}
+                      ? 'bg-[#0f162c] border-[#2f4b3c]'
+                      : 'bg-[#0b0e1d] border-[#263059] hover:border-[#4b5ca1]'
+                  }`}
                 style={
                   isActive
                     ? {
-                        borderColor: step.color,
-                        boxShadow: `4px 4px 0 #04050a, 0 0 12px ${step.color}55`,
-                      }
+                      borderColor: step.color,
+                      boxShadow: `4px 4px 0 #04050a, 0 0 12px ${step.color}55`,
+                    }
                     : undefined
                 }
               >
